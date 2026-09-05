@@ -8,7 +8,7 @@ import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, ShoppingCart, ArrowDownCircle, ArrowUpCircle, Wallet,
   Boxes, FileSpreadsheet, Scale, TrendingUp, Plus, X, Search, Trash2,
-  Download, Eye, Landmark, Check, Package, History,
+  Download, Eye, Landmark, Check, Package, History, Upload,
 } from 'lucide-react';
 
 const LOGO_SRC = '/logo.webp';
@@ -633,11 +633,208 @@ function NewSaleModal({ db, setDb, onClose }) {
   );
 }
 
+/* ---- Importación masiva de ventas desde Excel ---- */
+const SALES_HEADER_ALIASES = {
+  fecha: 'date', 'fecha venta': 'date',
+  'n factura': 'invoiceRef', 'no factura': 'invoiceRef', 'numero factura': 'invoiceRef', 'nfactura': 'invoiceRef', factura: 'invoiceRef',
+  cliente: 'client',
+  producto: 'product',
+  descripcion: 'description',
+  lote: 'lote',
+  tarifa: 'rate', precio: 'rate', 'precio unitario': 'rate',
+  cantidad: 'qty', cant: 'qty',
+  unidad: 'unit',
+  vencimiento: 'dueDate', 'fecha vencimiento': 'dueDate',
+  'monto pagado': 'paidAmount', pago: 'paidAmount', abono: 'paidAmount',
+  'cuenta de pago': 'accountName', cuenta: 'accountName',
+};
+const normalizeHeader = (h) => String(h || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/[°ºª.]/g, '').replace(/\s+/g, ' ').trim();
+
+const normalizeDateValue = (v) => {
+  if (v === undefined || v === null || v === '') return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime())) return dt.toISOString().slice(0, 10);
+  return null;
+};
+
+function downloadSalesTemplate() {
+  const headers = ['Fecha', 'N° Factura', 'Cliente', 'Producto', 'Lote', 'Tarifa', 'Cantidad', 'Unidad', 'Vencimiento', 'Monto pagado', 'Cuenta de pago'];
+  const rows = [
+    headers,
+    ['2026-01-15', '', 'Juan Ramirez', 'Alcohol Extraneutro 96%', '0100826', 4750, 400, 'Litros', '2026-02-14', 1900000, 'Caja general'],
+    ['2026-01-20', 'INV-HIST-01', 'María Torres', 'Alcohol Extraneutro 96%', '', 4750, 100, 'Litros', '', '', ''],
+    ['2026-01-20', 'INV-HIST-01', 'María Torres', 'Esencia de vainilla', '', 12000, 5, 'Kg', '', '', ''],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 12 }, { wch: 14 }, { wch: 22 }, { wch: 26 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ventas');
+  XLSX.writeFile(wb, 'Plantilla_ventas.xlsx');
+}
+
+function parseSalesRows(jsonRows) {
+  const errors = [];
+  const parsed = [];
+  jsonRows.forEach((raw, idx) => {
+    const rowNum = idx + 2;
+    const row = {};
+    Object.keys(raw).forEach((k) => {
+      const canon = SALES_HEADER_ALIASES[normalizeHeader(k)];
+      if (canon) row[canon] = raw[k];
+    });
+    const allEmpty = Object.values(raw).every((v) => String(v ?? '').trim() === '');
+    if (allEmpty) return;
+    const dateVal = normalizeDateValue(row.date);
+    const client = String(row.client || '').trim();
+    const rate = Number(row.rate);
+    const qty = Number(row.qty);
+    if (!dateVal) { errors.push(`Fila ${rowNum}: fecha inválida o vacía.`); return; }
+    if (!client) { errors.push(`Fila ${rowNum}: falta el cliente.`); return; }
+    if (!rate || rate <= 0) { errors.push(`Fila ${rowNum}: tarifa inválida.`); return; }
+    if (!qty || qty <= 0) { errors.push(`Fila ${rowNum}: cantidad inválida.`); return; }
+    parsed.push({
+      rowNum, date: dateVal,
+      invoiceRef: String(row.invoiceRef || '').trim(),
+      client,
+      product: String(row.product || '').trim(),
+      description: String(row.description || row.product || 'Producto').trim(),
+      lote: String(row.lote || '').trim(),
+      rate, qty,
+      unit: String(row.unit || '').trim() || 'Unidades',
+      dueDate: normalizeDateValue(row.dueDate) || addDays(dateVal, 30),
+      paidAmount: Number(row.paidAmount) || 0,
+      accountName: String(row.accountName || '').trim(),
+    });
+  });
+  return { rows: parsed, errors };
+}
+
+function buildImportPlan(db, rows) {
+  const groups = [];
+  const byRef = {};
+  rows.forEach((r) => {
+    if (r.invoiceRef) {
+      if (!byRef[r.invoiceRef]) { byRef[r.invoiceRef] = { rows: [] }; groups.push(byRef[r.invoiceRef]); }
+      byRef[r.invoiceRef].rows.push(r);
+    } else {
+      groups.push({ rows: [r] });
+    }
+  });
+
+  let clients = [...db.clients];
+  let products = [...db.products];
+  let nextInvoiceNumber = db.nextInvoiceNumber;
+  const newInvoices = [];
+  const newInvMoves = [];
+  const newCashMoves = [];
+  const errors = [];
+
+  groups.forEach((g) => {
+    const first = g.rows[0];
+    let client = clients.find((c) => c.name.trim().toLowerCase() === first.client.toLowerCase());
+    if (!client) {
+      client = { id: uid(), name: first.client, nit: '', phone: '', email: '', address: '' };
+      clients = [...clients, client];
+    }
+    const items = g.rows.map((r) => {
+      let productId = null;
+      if (r.product) {
+        let product = products.find((p) => p.name.trim().toLowerCase() === r.product.toLowerCase());
+        if (!product) {
+          product = { id: uid(), name: r.product, unit: r.unit || 'Unidades', price: r.rate };
+          products = [...products, product];
+        }
+        productId = product.id;
+      }
+      return {
+        id: uid(), description: r.description, lote: r.lote, rate: r.rate, qty: r.qty, unit: r.unit,
+        total: r.rate * r.qty, productId, cost: productId ? avgCostOf(db, productId) : 0,
+      };
+    });
+    const total = items.reduce((s, it) => s + it.total, 0);
+    const number = 'INV' + String(nextInvoiceNumber).padStart(4, '0');
+    nextInvoiceNumber += 1;
+    const invoiceId = uid();
+
+    const paidAmount = g.rows.reduce((s, r) => s + (r.paidAmount || 0), 0);
+    const accountName = g.rows.map((r) => r.accountName).find((a) => a);
+    const payments = [];
+    if (paidAmount > 0) {
+      if (!accountName) {
+        errors.push(`Factura ${number} (${first.client}): se indicó un monto pagado pero no una cuenta; se creó sin registrar el pago.`);
+      } else {
+        const account = db.accounts.find((a) => a.name.trim().toLowerCase() === accountName.toLowerCase());
+        if (!account) {
+          errors.push(`Factura ${number} (${first.client}): la cuenta "${accountName}" no existe; se creó sin registrar el pago.`);
+        } else {
+          payments.push({ id: uid(), date: first.date, amount: paidAmount, accountId: account.id, method: 'Importado' });
+          newCashMoves.push({ id: uid(), accountId: account.id, date: first.date, amount: paidAmount, concept: `Pago factura ${number} (importado)`, refType: 'venta', refId: invoiceId });
+        }
+      }
+    }
+
+    newInvoices.push({ id: invoiceId, number, date: first.date, dueDate: first.dueDate, clientId: client.id, items, total, payments });
+    items.forEach((it) => {
+      if (it.productId) newInvMoves.push({ id: uid(), productId: it.productId, date: first.date, qty: -it.qty, unitCost: it.cost, type: 'venta', refType: 'venta', refId: invoiceId });
+    });
+  });
+
+  return {
+    newDb: {
+      ...db, clients, products,
+      invoices: [...newInvoices, ...db.invoices],
+      inventoryMovements: [...(db.inventoryMovements || []), ...newInvMoves],
+      movements: [...db.movements, ...newCashMoves],
+      nextInvoiceNumber,
+    },
+    createdCount: newInvoices.length,
+    errors,
+  };
+}
+
 function Ventas({ db, setDb }) {
   const [showNew, setShowNew] = useState(false);
   const [payFor, setPayFor] = useState(null);
   const [preview, setPreview] = useState(null);
   const [q, setQ] = useState('');
+  const [importResult, setImportResult] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleFileChosen = (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const jsonRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, dateNF: 'yyyy-mm-dd' });
+        const { rows, errors: parseErrors } = parseSalesRows(jsonRows);
+        if (rows.length === 0) {
+          setImportResult({ created: 0, errors: parseErrors.length ? parseErrors : ['No se encontraron filas válidas en el archivo.'] });
+        } else {
+          const plan = buildImportPlan(db, rows);
+          setDb(plan.newDb);
+          setImportResult({ created: plan.createdCount, errors: [...parseErrors, ...plan.errors] });
+        }
+      } catch (err) {
+        setImportResult({ created: 0, errors: ['No se pudo leer el archivo. Verifica que sea un .xlsx exportado desde la plantilla.'] });
+      }
+      setImporting(false);
+    };
+    reader.readAsArrayBuffer(file);
+  };
 
   const rows = useMemo(() => {
     return db.invoices.filter((inv) => {
@@ -663,8 +860,35 @@ function Ventas({ db, setDb }) {
           <div className="qn-page-title">Ventas</div>
           <div className="qn-page-sub">Registra facturas de venta y descárgalas en Excel</div>
         </div>
-        <button className="qn-btn qn-btn-primary" onClick={() => setShowNew(true)}><Plus size={15} /> Nueva venta</button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="qn-btn" onClick={downloadSalesTemplate}><Download size={14} /> Descargar plantilla</button>
+          <button className="qn-btn" disabled={importing} onClick={() => fileInputRef.current && fileInputRef.current.click()}>
+            <Upload size={14} /> {importing ? 'Importando…' : 'Subir ventas en Excel'}
+          </button>
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleFileChosen} />
+          <button className="qn-btn qn-btn-primary" onClick={() => setShowNew(true)}><Plus size={15} /> Nueva venta</button>
+        </div>
       </div>
+
+      {importResult && (
+        <div className="qn-card qn-section" style={{ borderColor: importResult.errors.length ? C.amber : C.teal, marginBottom: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: importResult.errors.length ? 8 : 0 }}>
+                {importResult.created > 0
+                  ? `Se importaron ${importResult.created} factura${importResult.created === 1 ? '' : 's'} correctamente.`
+                  : 'No se importó ninguna factura.'}
+              </div>
+              {importResult.errors.length > 0 && (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: C.inkSoft }}>
+                  {importResult.errors.map((e, i) => <li key={i} style={{ marginBottom: 3 }}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+            <button className="qn-close" onClick={() => setImportResult(null)}><X size={16} /></button>
+          </div>
+        </div>
+      )}
 
       <div className="qn-card qn-section">
         <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
