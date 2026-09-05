@@ -8,7 +8,7 @@ import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, ShoppingCart, ArrowDownCircle, ArrowUpCircle, Wallet,
   Boxes, FileSpreadsheet, Scale, TrendingUp, Plus, X, Search, Trash2,
-  Download, Eye, Landmark, Check, Package, History, Upload,
+  Download, Eye, Landmark, Check, Package, History, Upload, Pencil,
 } from 'lucide-react';
 
 const LOGO_SRC = '/logo.webp';
@@ -299,6 +299,19 @@ function ConfirmDelete({ onConfirm, label }) {
     <button className="qn-btn qn-btn-sm qn-btn-icon" title={label || 'Eliminar'} onClick={() => setArm(true)}>
       <Trash2 size={14} />
     </button>
+  );
+}
+
+function DueDateField({ label, baseDate, value, onChange }) {
+  return (
+    <div className="qn-field">
+      <label className="qn-label">{label}</label>
+      <input className="qn-input" type="date" value={value} onChange={(e) => onChange(e.target.value)} style={{ marginBottom: 6 }} />
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button type="button" className="qn-linklike" onClick={() => onChange(addDays(baseDate, 15))}>+15 días</button>
+        <button type="button" className="qn-linklike" onClick={() => onChange(addDays(baseDate, 30))}>+30 días</button>
+      </div>
+    </div>
   );
 }
 
@@ -619,10 +632,7 @@ function NewSaleModal({ db, setDb, onClose }) {
           <label className="qn-label">Fecha de venta</label>
           <input className="qn-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
-        <div className="qn-field">
-          <label className="qn-label">Fecha de vencimiento</label>
-          <input className="qn-input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-        </div>
+        <DueDateField label="Fecha de vencimiento" baseDate={date} value={dueDate} onChange={setDueDate} />
       </div>
 
       <div style={{ marginTop: 6 }}>
@@ -656,6 +666,127 @@ function NewSaleModal({ db, setDb, onClose }) {
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="qn-btn" onClick={onClose}>Cancelar</button>
           <button className="qn-btn qn-btn-primary" disabled={!clientId || total <= 0} onClick={save}><Check size={14} /> Guardar venta</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---- Editar una venta ya creada ---- */
+function EditSaleModal({ db, setDb, invoice, onClose }) {
+  const [clientId, setClientId] = useState(invoice.clientId);
+  const [date, setDate] = useState(invoice.date);
+  const [dueDate, setDueDate] = useState(invoice.dueDate);
+  const [items, setItems] = useState(invoice.items.map((it) => ({ ...it })));
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [ncName, setNcName] = useState('');
+  const [ncPhone, setNcPhone] = useState('');
+
+  const updateItem = (id, patch) => {
+    setItems((prev) => prev.map((it) => {
+      if (it.id !== id) return it;
+      const next = { ...it, ...patch };
+      next.total = Number(next.rate || 0) * Number(next.qty || 0);
+      return next;
+    }));
+  };
+  const pickProduct = (id, productId) => {
+    const p = db.products.find((x) => x.id === productId);
+    updateItem(id, { productId, description: p ? p.name : '', rate: p ? p.price : 0, unit: p ? p.unit : 'Unidades' });
+  };
+  const addRow = () => setItems((prev) => [...prev, { id: uid(), productId: '', description: '', lote: '', rate: 0, qty: 1, unit: 'Unidades', total: 0 }]);
+  const removeRow = (id) => setItems((prev) => prev.filter((it) => it.id !== id));
+  const total = items.reduce((s, it) => s + it.total, 0);
+
+  const saveClient = () => {
+    if (!ncName.trim()) return;
+    const nc = { id: uid(), name: ncName.trim(), nit: '', phone: ncPhone.trim(), email: '', address: '' };
+    setDb((prev) => ({ ...prev, clients: [...prev.clients, nc] }));
+    setClientId(nc.id);
+    setShowNewClient(false);
+    setNcName(''); setNcPhone('');
+  };
+
+  const save = () => {
+    if (!clientId || items.length === 0 || total <= 0) return;
+    setDb((prev) => {
+      const finalItems = items.map((it) => ({
+        id: it.id || uid(), description: it.description, lote: it.lote, rate: Number(it.rate), qty: Number(it.qty), unit: it.unit, total: it.total,
+        productId: it.productId || null, cost: it.productId ? avgCostOf(prev, it.productId) : 0,
+      }));
+      const invoices = prev.invoices.map((i) => i.id === invoice.id ? { ...i, date, dueDate, clientId, items: finalItems, total } : i);
+      // Reconstruye los movimientos de inventario de esta factura para que coincidan con los artículos editados
+      const otherInvMoves = (prev.inventoryMovements || []).filter((m) => !(m.refType === 'venta' && m.refId === invoice.id));
+      const newInvMoves = finalItems.filter((it) => it.productId).map((it) => ({
+        id: uid(), productId: it.productId, date, qty: -it.qty, unitCost: it.cost, type: 'venta', refType: 'venta', refId: invoice.id,
+      }));
+      return { ...prev, invoices, inventoryMovements: [...otherInvMoves, ...newInvMoves] };
+    });
+    onClose();
+  };
+
+  return (
+    <Modal title={`Editar factura ${invoice.number}`} onClose={onClose} wide>
+      <div className="qn-row3">
+        <div className="qn-field">
+          <label className="qn-label">Cliente</label>
+          {!showNewClient ? (
+            <select className="qn-select" value={clientId} onChange={(e) => setClientId(e.target.value)}>
+              {db.clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          ) : (
+            <div className="qn-row2">
+              <input className="qn-input" placeholder="Nombre" value={ncName} onChange={(e) => setNcName(e.target.value)} />
+              <input className="qn-input" placeholder="Teléfono" value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} />
+            </div>
+          )}
+          {!showNewClient ? (
+            <button className="qn-linklike" style={{ marginTop: 6 }} onClick={() => setShowNewClient(true)}><Plus size={12} /> Nuevo cliente</button>
+          ) : (
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <button className="qn-linklike" onClick={saveClient}><Check size={12} /> Guardar</button>
+              <button className="qn-linklike" style={{ color: C.inkSoft }} onClick={() => setShowNewClient(false)}>Cancelar</button>
+            </div>
+          )}
+        </div>
+        <div className="qn-field">
+          <label className="qn-label">Fecha de venta</label>
+          <input className="qn-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <DueDateField label="Fecha de vencimiento" baseDate={date} value={dueDate} onChange={setDueDate} />
+      </div>
+
+      <div style={{ marginTop: 6 }}>
+        <div className="qn-item-row" style={{ marginBottom: 6 }}>
+          <span className="qn-label">Artículo</span><span className="qn-label">Tarifa</span><span className="qn-label">Cant.</span><span className="qn-label">Unidad</span><span className="qn-label">Lote</span><span />
+        </div>
+        {items.map((it) => (
+          <div className="qn-item-row" key={it.id}>
+            <div>
+              <select className="qn-select" value={it.productId || ''} onChange={(e) => pickProduct(it.id, e.target.value)} style={{ marginBottom: 5 }}>
+                <option value="">— Producto libre —</option>
+                {db.products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <input className="qn-input" placeholder="Descripción" value={it.description} onChange={(e) => updateItem(it.id, { description: e.target.value })} />
+            </div>
+            <input className="qn-input" type="number" value={it.rate} onChange={(e) => updateItem(it.id, { rate: e.target.value })} />
+            <input className="qn-input" type="number" value={it.qty} onChange={(e) => updateItem(it.id, { qty: e.target.value })} />
+            <input className="qn-input" value={it.unit} onChange={(e) => updateItem(it.id, { unit: e.target.value })} />
+            <input className="qn-input" value={it.lote} onChange={(e) => updateItem(it.id, { lote: e.target.value })} />
+            <button className="qn-close" onClick={() => removeRow(it.id)} title="Quitar"><X size={16} /></button>
+          </div>
+        ))}
+        <button className="qn-linklike" onClick={addRow}><Plus size={13} /> Agregar artículo</button>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 20, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+        <div>
+          <div className="qn-label" style={{ marginBottom: 2 }}>Total factura</div>
+          <div className="qn-display" style={{ fontSize: 22, fontWeight: 700 }}>{fmtCOP(total)}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="qn-btn" onClick={onClose}>Cancelar</button>
+          <button className="qn-btn qn-btn-primary" disabled={!clientId || total <= 0} onClick={save}><Check size={14} /> Guardar cambios</button>
         </div>
       </div>
     </Modal>
@@ -853,6 +984,7 @@ function Ventas({ db, setDb }) {
   const [showNew, setShowNew] = useState(false);
   const [payFor, setPayFor] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [q, setQ] = useState('');
   const [importResult, setImportResult] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -988,6 +1120,7 @@ function Ventas({ db, setDb }) {
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="qn-btn qn-btn-sm qn-btn-icon" title="Ver" onClick={() => setPreview(inv.id)}><Eye size={14} /></button>
+                        <button className="qn-btn qn-btn-sm qn-btn-icon" title="Editar" onClick={() => setEditing(inv.id)}><Pencil size={14} /></button>
                         <button className="qn-btn qn-btn-sm qn-btn-icon" title="Excel" onClick={() => downloadInvoiceExcel(db, inv)}><FileSpreadsheet size={14} /></button>
                         {bal > 0 && <button className="qn-btn qn-btn-sm" onClick={() => setPayFor(inv)}>Registrar pago</button>}
                         <ConfirmDelete onConfirm={() => deleteInvoice(inv.id)} label="Eliminar factura" />
@@ -1002,6 +1135,9 @@ function Ventas({ db, setDb }) {
       </div>
 
       {showNew && <NewSaleModal db={db} setDb={setDb} onClose={() => setShowNew(false)} />}
+      {editing && db.invoices.find((i) => i.id === editing) && (
+        <EditSaleModal db={db} setDb={setDb} invoice={db.invoices.find((i) => i.id === editing)} onClose={() => setEditing(null)} />
+      )}
       {payFor && <PaymentModal db={db} doc={payFor} kind="cxc" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
       {preview && db.invoices.find((i) => i.id === preview) && (
         <InvoicePreview
@@ -2410,7 +2546,6 @@ function App({ userId }) {
         setDb(data.data);
         return;
       }
-      // Solo llegamos aquí si realmente no existe ninguna fila para este usuario (usuario nuevo).
       const seed = seedData();
       const { error: upsertError } = await supabase.from('app_data').upsert({ user_id: userId, data: seed, updated_at: new Date().toISOString() });
       if (cancelled) return;
@@ -2475,7 +2610,7 @@ function App({ userId }) {
 }
 
 export default function Root() {
-  const [session, setSession] = useState(undefined); // undefined = checking, null = logged out
+  const [session, setSession] = useState(undefined);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
