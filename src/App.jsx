@@ -664,6 +664,26 @@ const normalizeDateValue = (v) => {
   return null;
 };
 
+const parseNumberLike = (v) => {
+  if (v === null || v === undefined || v === '') return NaN;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim().replace(/[^0-9.,-]/g, '');
+  if (!s) return NaN;
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma > -1 && lastDot > -1) {
+    s = lastComma > lastDot ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  } else if (lastComma > -1) {
+    const parts = s.split(',');
+    s = (parts.length === 2 && parts[1].length <= 2) ? parts[0] + '.' + parts[1] : s.replace(/,/g, '');
+  } else if (lastDot > -1) {
+    const parts = s.split('.');
+    if (!(parts.length === 2 && parts[1].length <= 2)) s = s.replace(/\./g, '');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? NaN : n;
+};
+
 function downloadSalesTemplate() {
   const headers = ['Fecha', 'N° Factura', 'Cliente', 'Producto', 'Lote', 'Tarifa', 'Cantidad', 'Unidad', 'Vencimiento', 'Monto pagado', 'Cuenta de pago'];
   const rows = [
@@ -693,12 +713,12 @@ function parseSalesRows(jsonRows) {
     if (allEmpty) return;
     const dateVal = normalizeDateValue(row.date);
     const client = String(row.client || '').trim();
-    const rate = Number(row.rate);
-    const qty = Number(row.qty);
+    const rate = parseNumberLike(row.rate);
+    const qty = parseNumberLike(row.qty);
     if (!dateVal) { errors.push(`Fila ${rowNum}: fecha inválida o vacía.`); return; }
     if (!client) { errors.push(`Fila ${rowNum}: falta el cliente.`); return; }
-    if (!rate || rate <= 0) { errors.push(`Fila ${rowNum}: tarifa inválida.`); return; }
-    if (!qty || qty <= 0) { errors.push(`Fila ${rowNum}: cantidad inválida.`); return; }
+    if (!rate || rate <= 0 || isNaN(rate)) { errors.push(`Fila ${rowNum}: tarifa inválida.`); return; }
+    if (!qty || qty <= 0 || isNaN(qty)) { errors.push(`Fila ${rowNum}: cantidad inválida.`); return; }
     parsed.push({
       rowNum, date: dateVal,
       invoiceRef: String(row.invoiceRef || '').trim(),
@@ -709,7 +729,7 @@ function parseSalesRows(jsonRows) {
       rate, qty,
       unit: String(row.unit || '').trim() || 'Unidades',
       dueDate: normalizeDateValue(row.dueDate) || addDays(dateVal, 30),
-      paidAmount: Number(row.paidAmount) || 0,
+      paidAmount: parseNumberLike(row.paidAmount) || 0,
       accountName: String(row.accountName || '').trim(),
     });
   });
