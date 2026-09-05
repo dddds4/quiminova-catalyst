@@ -959,6 +959,155 @@ function Ventas({ db, setDb }) {
   );
 }
 
+/* ---- Importación masiva de pagos desde Excel (aplica a Ventas y Cuentas por pagar) ---- */
+const PAYMENT_HEADER_ALIASES = {
+  referencia: 'reference', 'no factura': 'reference', 'n factura': 'reference', factura: 'reference', ref: 'reference',
+  fecha: 'date', 'fecha pago': 'date',
+  monto: 'amount', valor: 'amount', pago: 'amount', abono: 'amount',
+  cuenta: 'accountName', 'cuenta de pago': 'accountName',
+  metodo: 'method',
+};
+
+function downloadPaymentsTemplate() {
+  const headers = ['Referencia', 'Fecha', 'Monto', 'Cuenta', 'Método'];
+  const rows = [
+    headers,
+    ['INV0019', '2026-09-01', 1900000, 'Caja general', 'Transferencia'],
+    ['CXP0003', '2026-09-02', 500000, 'Bancolombia', 'Transferencia'],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 20 }, { wch: 16 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pagos');
+  XLSX.writeFile(wb, 'Plantilla_pagos.xlsx');
+}
+
+function parsePaymentsRows(jsonRows) {
+  const errors = [];
+  const parsed = [];
+  jsonRows.forEach((raw, idx) => {
+    const rowNum = idx + 2;
+    const row = {};
+    Object.keys(raw).forEach((k) => {
+      const canon = PAYMENT_HEADER_ALIASES[normalizeHeader(k)];
+      if (canon) row[canon] = raw[k];
+    });
+    const allEmpty = Object.values(raw).every((v) => String(v ?? '').trim() === '');
+    if (allEmpty) return;
+    const reference = String(row.reference || '').trim();
+    const dateVal = normalizeDateValue(row.date);
+    const amount = parseNumberLike(row.amount);
+    const accountName = String(row.accountName || '').trim();
+    if (!reference) { errors.push(`Fila ${rowNum}: falta la referencia (N° de factura o de cuenta por pagar).`); return; }
+    if (!dateVal) { errors.push(`Fila ${rowNum}: fecha inválida o vacía.`); return; }
+    if (!amount || amount <= 0 || isNaN(amount)) { errors.push(`Fila ${rowNum}: monto inválido.`); return; }
+    if (!accountName) { errors.push(`Fila ${rowNum}: falta la cuenta.`); return; }
+    parsed.push({ rowNum, reference, date: dateVal, amount, accountName, method: String(row.method || '').trim() });
+  });
+  return { rows: parsed, errors };
+}
+
+function buildPaymentsImportPlan(db, rows) {
+  let invoices = [...db.invoices];
+  let payables = [...db.payables];
+  const newMovements = [];
+  const errors = [];
+  let appliedCount = 0;
+
+  rows.forEach((r) => {
+    const ref = r.reference.toUpperCase();
+    const account = db.accounts.find((a) => a.name.trim().toLowerCase() === r.accountName.toLowerCase());
+    if (!account) { errors.push(`Fila ${r.rowNum}: la cuenta "${r.accountName}" no existe.`); return; }
+
+    if (ref.startsWith('INV')) {
+      const idx = invoices.findIndex((i) => i.number.toUpperCase() === ref);
+      if (idx === -1) { errors.push(`Fila ${r.rowNum}: no existe la factura ${r.reference}.`); return; }
+      const inv = invoices[idx];
+      const payment = { id: uid(), date: r.date, amount: r.amount, accountId: account.id, method: r.method || 'Importado' };
+      invoices[idx] = { ...inv, payments: [...(inv.payments || []), payment] };
+      newMovements.push({ id: uid(), accountId: account.id, date: r.date, amount: r.amount, concept: `Pago factura ${inv.number} (importado)`, refType: 'venta', refId: inv.id });
+      appliedCount += 1;
+    } else if (ref.startsWith('CXP')) {
+      const idx = payables.findIndex((p) => p.number.toUpperCase() === ref);
+      if (idx === -1) { errors.push(`Fila ${r.rowNum}: no existe la cuenta por pagar ${r.reference}.`); return; }
+      const pay = payables[idx];
+      const payment = { id: uid(), date: r.date, amount: r.amount, accountId: account.id, method: r.method || 'Importado' };
+      payables[idx] = { ...pay, payments: [...(pay.payments || []), payment] };
+      newMovements.push({ id: uid(), accountId: account.id, date: r.date, amount: -r.amount, concept: `Pago ${pay.number} (importado)`, refType: 'cxp', refId: pay.id });
+      appliedCount += 1;
+    } else {
+      errors.push(`Fila ${r.rowNum}: la referencia "${r.reference}" no empieza con INV (factura) ni CXP (cuenta por pagar).`);
+    }
+  });
+
+  return {
+    newDb: { ...db, invoices, payables, movements: [...db.movements, ...newMovements] },
+    appliedCount,
+    errors,
+  };
+}
+
+function ImportPaymentsControls({ db, setDb }) {
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const handleFileChosen = (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const wb = XLSX.read(evt.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const jsonRows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, dateNF: 'yyyy-mm-dd' });
+        const { rows, errors: parseErrors } = parsePaymentsRows(jsonRows);
+        if (rows.length === 0) {
+          setResult({ applied: 0, errors: parseErrors.length ? parseErrors : ['No se encontraron filas válidas en el archivo.'] });
+        } else {
+          const plan = buildPaymentsImportPlan(db, rows);
+          setDb(plan.newDb);
+          setResult({ applied: plan.appliedCount, errors: [...parseErrors, ...plan.errors] });
+        }
+      } catch (err) {
+        setResult({ applied: 0, errors: ['No se pudo leer el archivo. Verifica que sea un .xlsx exportado desde la plantilla.'] });
+      }
+      setImporting(false);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  return (
+    <>
+      <button className="qn-btn" onClick={downloadPaymentsTemplate}><Download size={14} /> Plantilla de pagos</button>
+      <button className="qn-btn" disabled={importing} onClick={() => fileInputRef.current && fileInputRef.current.click()}>
+        <Upload size={14} /> {importing ? 'Importando…' : 'Subir pagos en Excel'}
+      </button>
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleFileChosen} />
+      {result && (
+        <div className="qn-card qn-section" style={{ borderColor: result.errors.length ? C.amber : C.teal, width: '100%', order: 99 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: result.errors.length ? 8 : 0 }}>
+                {result.applied > 0 ? `Se registraron ${result.applied} pago${result.applied === 1 ? '' : 's'} correctamente.` : 'No se registró ningún pago.'}
+              </div>
+              {result.errors.length > 0 && (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: C.inkSoft }}>
+                  {result.errors.map((e, i) => <li key={i} style={{ marginBottom: 3 }}>{e}</li>)}
+                </ul>
+              )}
+            </div>
+            <button className="qn-close" onClick={() => setResult(null)}><X size={16} /></button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ============================== CUENTAS POR COBRAR ============================== */
 function CuentasCobrar({ db, setDb }) {
   const [payFor, setPayFor] = useState(null);
@@ -979,10 +1128,13 @@ function CuentasCobrar({ db, setDb }) {
           <div className="qn-page-title">Cuentas por cobrar</div>
           <div className="qn-page-sub">Saldo pendiente total: <strong>{fmtCOP(totalAR(db))}</strong></div>
         </div>
-        <select className="qn-select" style={{ width: 190 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="pendientes">Con saldo pendiente</option>
-          <option value="todas">Todas las facturas</option>
-        </select>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'start', maxWidth: 520 }}>
+          <select className="qn-select" style={{ width: 190 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="pendientes">Con saldo pendiente</option>
+            <option value="todas">Todas las facturas</option>
+          </select>
+          <ImportPaymentsControls db={db} setDb={setDb} />
+        </div>
       </div>
       <div className="qn-card qn-section">
         {rows.length === 0 ? (
@@ -1094,6 +1246,18 @@ function CuentasPagar({ db, setDb }) {
   const [filter, setFilter] = useState('pendientes');
   const rows = db.payables.filter((p) => filter === 'todas' ? true : balanceOf(p) > 0);
 
+  const supplierTotals = useMemo(() => {
+    const map = {};
+    db.payables.filter((p) => p.type === 'Proveedor' && balanceOf(p) > 0).forEach((p) => {
+      const sup = db.suppliers.find((s) => s.id === p.supplierId);
+      const name = sup ? sup.name : '(proveedor eliminado)';
+      if (!map[name]) map[name] = { total: 0, count: 0 };
+      map[name].total += balanceOf(p);
+      map[name].count += 1;
+    });
+    return Object.entries(map).sort((a, b) => b[1].total - a[1].total).map(([name, v]) => ({ name, ...v }));
+  }, [db.payables, db.suppliers]);
+
   const addPayment = (payableId, payment) => {
     setDb((prev) => {
       const doc = prev.payables.find((p) => p.id === payableId);
@@ -1110,14 +1274,34 @@ function CuentasPagar({ db, setDb }) {
           <div className="qn-page-title">Cuentas por pagar</div>
           <div className="qn-page-sub">Saldo pendiente total: <strong>{fmtCOP(totalAP(db))}</strong></div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 620 }}>
           <select className="qn-select" style={{ width: 190 }} value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="pendientes">Con saldo pendiente</option>
             <option value="todas">Todas</option>
           </select>
+          <ImportPaymentsControls db={db} setDb={setDb} />
           <button className="qn-btn qn-btn-primary" onClick={() => setShowNew(true)}><Plus size={15} /> Nueva cuenta por pagar</button>
         </div>
       </div>
+
+      {supplierTotals.length > 0 && (
+        <div className="qn-card qn-section">
+          <div className="qn-section-title">Total adeudado por proveedor</div>
+          <table className="qn-table">
+            <thead><tr><th>Proveedor</th><th>Facturas pendientes</th><th style={{ textAlign: 'right' }}>Total adeudado</th></tr></thead>
+            <tbody>
+              {supplierTotals.map((s) => (
+                <tr key={s.name}>
+                  <td>{s.name}</td>
+                  <td>{s.count}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600, color: C.rust }}>{fmtMoney(s.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="qn-card qn-section">
         {rows.length === 0 ? (
           <Empty title="Sin cuentas por pagar" sub="Registra facturas de proveedores o gastos generales." />
