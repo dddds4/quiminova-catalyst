@@ -2201,32 +2201,65 @@ function LoginScreen() {
 
 function App({ userId }) {
   const [db, setDb] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [tab, setTab] = useState('dashboard');
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from('app_data').select('data').eq('user_id', userId).maybeSingle();
+    let cancelled = false;
+    async function load(attempt) {
+      const { data, error } = await supabase.from('app_data').select('data').eq('user_id', userId).maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        if (attempt < 2) { setTimeout(() => load(attempt + 1), 600); return; }
+        setLoadError('No se pudo conectar con tu base de datos: ' + error.message + '. Tu información NO se ha borrado — intenta de nuevo.');
+        return;
+      }
       if (data && data.data) {
         setDb(data.data);
-      } else {
-        const seed = seedData();
-        await supabase.from('app_data').upsert({ user_id: userId, data: seed, updated_at: new Date().toISOString() });
-        setDb(seed);
+        return;
       }
-    })();
-  }, [userId]);
+      // Solo llegamos aquí si realmente no existe ninguna fila para este usuario (usuario nuevo).
+      const seed = seedData();
+      const { error: upsertError } = await supabase.from('app_data').upsert({ user_id: userId, data: seed, updated_at: new Date().toISOString() });
+      if (cancelled) return;
+      if (upsertError) {
+        setLoadError('No se pudo inicializar tu información: ' + upsertError.message);
+        return;
+      }
+      setDb(seed);
+    }
+    setLoadError(null);
+    load(0);
+    return () => { cancelled = true; };
+  }, [userId, reloadKey]);
 
   useEffect(() => {
     if (!db) return;
     if (firstLoad.current) { firstLoad.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      supabase.from('app_data').upsert({ user_id: userId, data: db, updated_at: new Date().toISOString() });
+      supabase.from('app_data').upsert({ user_id: userId, data: db, updated_at: new Date().toISOString() }).then(({ error }) => {
+        if (error) console.error('Error guardando en Supabase:', error);
+      });
     }, 500);
     return () => clearTimeout(saveTimer.current);
   }, [db, userId]);
+
+  if (loadError) {
+    return (
+      <div className="qn-root" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <GlobalStyle />
+        <div style={{ textAlign: 'center', maxWidth: 380, padding: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8, fontFamily: "'Space Grotesk', sans-serif" }}>No se pudo cargar tu información</div>
+          <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 18 }}>{loadError}</div>
+          <button className="qn-btn qn-btn-primary" onClick={() => setReloadKey((k) => k + 1)}>Reintentar</button>
+        </div>
+      </div>
+    );
+  }
 
   if (!db) return <LoadingScreen />;
 
