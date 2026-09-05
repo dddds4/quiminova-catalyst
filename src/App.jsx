@@ -8,7 +8,7 @@ import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, ShoppingCart, ArrowDownCircle, ArrowUpCircle, Wallet,
   Boxes, FileSpreadsheet, Scale, TrendingUp, Plus, X, Search, Trash2,
-  Download, Eye, Landmark, Check, Package, History, Upload, Pencil,
+  Download, Eye, Landmark, Check, Package, History, Upload, Pencil, Users, ChevronDown, ChevronUp,
 } from 'lucide-react';
 
 const LOGO_SRC = '/logo.webp';
@@ -324,6 +324,7 @@ function Sidebar({ tab, setTab, company }) {
       links: [
         { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
         { id: 'cxc', label: 'Cuentas por cobrar', icon: ArrowDownCircle },
+        { id: 'cartera', label: 'Cartera de clientes', icon: Users },
         { id: 'cxp', label: 'Cuentas por pagar', icon: ArrowUpCircle },
         { id: 'inventario', label: 'Inventario', icon: Package },
         { id: 'caja', label: 'Caja y bancos', icon: Wallet },
@@ -1407,6 +1408,85 @@ function CuentasCobrar({ db, setDb }) {
           onDeleteInvoice={() => { deleteInvoice(preview); setPreview(null); }}
         />
       )}
+    </div>
+  );
+}
+
+/* ============================== CARTERA DE CLIENTES ============================== */
+function Cartera({ db }) {
+  const [expanded, setExpanded] = useState(null);
+
+  const rows = useMemo(() => {
+    const map = {};
+    db.invoices.forEach((inv) => {
+      const bal = balanceOf(inv);
+      if (bal <= 0.5) return;
+      if (!map[inv.clientId]) map[inv.clientId] = { clientId: inv.clientId, invoices: [], facturado: 0, pagado: 0, saldo: 0 };
+      map[inv.clientId].invoices.push(inv);
+      map[inv.clientId].facturado += inv.total;
+      map[inv.clientId].pagado += paidOf(inv);
+      map[inv.clientId].saldo += bal;
+    });
+    return Object.values(map).sort((a, b) => b.saldo - a.saldo);
+  }, [db.invoices]);
+
+  const totalCartera = rows.reduce((s, r) => s + r.saldo, 0);
+
+  return (
+    <div>
+      <div className="qn-page-head">
+        <div>
+          <div className="qn-page-title">Cartera de clientes</div>
+          <div className="qn-page-sub">Total en cartera: <strong>{fmtCOP(totalCartera)}</strong></div>
+        </div>
+      </div>
+      <div className="qn-card qn-section">
+        {rows.length === 0 ? (
+          <Empty title="Cartera al día" sub="Ningún cliente tiene saldo pendiente en este momento." />
+        ) : (
+          <table className="qn-table">
+            <thead>
+              <tr><th>Cliente</th><th>Facturas pendientes</th><th style={{ textAlign: 'right' }}>Facturado</th><th style={{ textAlign: 'right' }}>Abonado</th><th style={{ textAlign: 'right' }}>Saldo pendiente</th><th></th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const client = db.clients.find((c) => c.id === r.clientId);
+                const isOpen = expanded === r.clientId;
+                return (
+                  <React.Fragment key={r.clientId}>
+                    <tr>
+                      <td style={{ fontWeight: 600 }}>{client ? client.name : '(cliente eliminado)'}</td>
+                      <td>{r.invoices.length}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtMoney(r.facturado)}</td>
+                      <td style={{ textAlign: 'right' }}>{fmtMoney(r.pagado)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: C.rust }}>{fmtMoney(r.saldo)}</td>
+                      <td>
+                        <button className="qn-btn qn-btn-sm qn-btn-icon" title="Ver facturas" onClick={() => setExpanded(isOpen ? null : r.clientId)}>
+                          {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      </td>
+                    </tr>
+                    {isOpen && r.invoices
+                      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+                      .map((inv) => (
+                        <tr key={inv.id} style={{ background: C.bg }}>
+                          <td colSpan={2} style={{ paddingLeft: 24 }}>
+                            <span className="qn-mono">{inv.number}</span>
+                            <span style={{ color: C.inkSoft, fontSize: 12 }}> · vence {fmtDate(inv.dueDate)}</span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{fmtMoney(inv.total)}</td>
+                          <td style={{ textAlign: 'right' }}>{fmtMoney(paidOf(inv))}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(balanceOf(inv))}</td>
+                          <td><Badge status={statusOf(inv)} /></td>
+                        </tr>
+                      ))}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
@@ -2622,6 +2702,7 @@ function App({ userId }) {
           {tab === 'dashboard' && <Dashboard db={db} />}
           {tab === 'ventas' && <Ventas db={db} setDb={setDb} />}
           {tab === 'cxc' && <CuentasCobrar db={db} setDb={setDb} />}
+          {tab === 'cartera' && <Cartera db={db} />}
           {tab === 'cxp' && <CuentasPagar db={db} setDb={setDb} />}
           {tab === 'inventario' && <Inventario db={db} setDb={setDb} />}
           {tab === 'caja' && <CajaBancos db={db} setDb={setDb} />}
