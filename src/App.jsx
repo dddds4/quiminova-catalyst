@@ -403,7 +403,7 @@ function downloadInvoiceExcel(db, invoice) {
 }
 
 /* ============================== INVOICE PREVIEW ============================== */
-function InvoicePreview({ db, invoice, onClose, onDeletePayment, onDeleteInvoice }) {
+function InvoicePreview({ db, invoice, onClose, onDeletePayment, onDeleteInvoice, onEditPaymentDate }) {
   const client = db.clients.find((c) => c.id === invoice.clientId);
   const bal = balanceOf(invoice);
   return (
@@ -471,7 +471,7 @@ function InvoicePreview({ db, invoice, onClose, onDeletePayment, onDeleteInvoice
                 const acc = db.accounts.find((a) => a.id === p.accountId);
                 return (
                   <tr key={p.id}>
-                    <td>{fmtDate(p.date)}</td>
+                    <td><input className="qn-input" type="date" value={p.date} onChange={(e) => onEditPaymentDate(p.id, e.target.value)} style={{ maxWidth: 150 }} /></td>
                     <td>{acc ? acc.name : '—'}</td>
                     <td>{p.method || '—'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(p.amount)}</td>
@@ -1053,6 +1053,14 @@ function Ventas({ db, setDb }) {
     }));
   };
 
+  const editInvoicePaymentDate = (invoiceId, paymentId, newDate) => {
+    setDb((prev) => ({
+      ...prev,
+      invoices: prev.invoices.map((i) => i.id === invoiceId ? { ...i, payments: (i.payments || []).map((p) => p.id === paymentId ? { ...p, date: newDate } : p) } : i),
+      movements: prev.movements.map((m) => m.paymentId === paymentId ? { ...m, date: newDate } : m),
+    }));
+  };
+
   return (
     <div>
       <div className="qn-page-head">
@@ -1145,6 +1153,7 @@ function Ventas({ db, setDb }) {
           invoice={db.invoices.find((i) => i.id === preview)}
           onClose={() => setPreview(null)}
           onDeletePayment={(paymentId) => deleteInvoicePayment(preview, paymentId)}
+          onEditPaymentDate={(paymentId, newDate) => editInvoicePaymentDate(preview, paymentId, newDate)}
           onDeleteInvoice={() => { deleteInvoice(preview); setPreview(null); }}
         />
       )}
@@ -1333,6 +1342,13 @@ function CuentasCobrar({ db, setDb }) {
       movements: prev.movements.filter((m) => m.paymentId !== paymentId),
     }));
   };
+  const editInvoicePaymentDate = (invoiceId, paymentId, newDate) => {
+    setDb((prev) => ({
+      ...prev,
+      invoices: prev.invoices.map((i) => i.id === invoiceId ? { ...i, payments: (i.payments || []).map((p) => p.id === paymentId ? { ...p, date: newDate } : p) } : i),
+      movements: prev.movements.map((m) => m.paymentId === paymentId ? { ...m, date: newDate } : m),
+    }));
+  };
   return (
     <div>
       <div className="qn-page-head">
@@ -1387,6 +1403,7 @@ function CuentasCobrar({ db, setDb }) {
           invoice={db.invoices.find((i) => i.id === preview)}
           onClose={() => setPreview(null)}
           onDeletePayment={(paymentId) => deleteInvoicePayment(preview, paymentId)}
+          onEditPaymentDate={(paymentId, newDate) => editInvoicePaymentDate(preview, paymentId, newDate)}
           onDeleteInvoice={() => { deleteInvoice(preview); setPreview(null); }}
         />
       )}
@@ -1467,7 +1484,7 @@ function NewPayableModal({ db, setDb, onClose }) {
   );
 }
 
-function PayableDetail({ db, payable, onClose, onDeletePayment, onDeletePayable }) {
+function PayableDetail({ db, payable, onClose, onDeletePayment, onDeletePayable, onEditPaymentDate }) {
   const supplier = db.suppliers.find((s) => s.id === payable.supplierId);
   const bal = balanceOf(payable);
   return (
@@ -1511,7 +1528,7 @@ function PayableDetail({ db, payable, onClose, onDeletePayment, onDeletePayable 
               const acc = db.accounts.find((a) => a.id === p.accountId);
               return (
                 <tr key={p.id}>
-                  <td>{fmtDate(p.date)}</td>
+                  <td><input className="qn-input" type="date" value={p.date} onChange={(e) => onEditPaymentDate(p.id, e.target.value)} style={{ maxWidth: 150 }} /></td>
                   <td>{acc ? acc.name : '—'}</td>
                   <td>{p.method || '—'}</td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(p.amount)}</td>
@@ -1573,6 +1590,14 @@ function CuentasPagar({ db, setDb }) {
       ...prev,
       payables: prev.payables.map((p) => p.id === payableId ? { ...p, payments: (p.payments || []).filter((x) => x.id !== paymentId) } : p),
       movements: prev.movements.filter((m) => m.paymentId !== paymentId),
+    }));
+  };
+
+  const editPayablePaymentDate = (payableId, paymentId, newDate) => {
+    setDb((prev) => ({
+      ...prev,
+      payables: prev.payables.map((p) => p.id === payableId ? { ...p, payments: (p.payments || []).map((x) => x.id === paymentId ? { ...x, date: newDate } : x) } : p),
+      movements: prev.movements.map((m) => m.paymentId === paymentId ? { ...m, date: newDate } : m),
     }));
   };
 
@@ -1652,6 +1677,7 @@ function CuentasPagar({ db, setDb }) {
           payable={db.payables.find((p) => p.id === preview)}
           onClose={() => setPreview(null)}
           onDeletePayment={(paymentId) => deletePayablePayment(preview, paymentId)}
+          onEditPaymentDate={(paymentId, newDate) => editPayablePaymentDate(preview, paymentId, newDate)}
           onDeletePayable={() => { deletePayable(preview); setPreview(null); }}
         />
       )}
@@ -2622,3 +2648,4 @@ export default function Root() {
   if (!session) return <LoginScreen />;
   return <App userId={session.user.id} />;
 }
+
