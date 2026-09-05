@@ -390,7 +390,7 @@ function downloadInvoiceExcel(db, invoice) {
 }
 
 /* ============================== INVOICE PREVIEW ============================== */
-function InvoicePreview({ db, invoice, onClose }) {
+function InvoicePreview({ db, invoice, onClose, onDeletePayment, onDeleteInvoice }) {
   const client = db.clients.find((c) => c.id === invoice.clientId);
   const bal = balanceOf(invoice);
   return (
@@ -445,11 +445,40 @@ function InvoicePreview({ db, invoice, onClose }) {
           </div>
         </div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
-        <button className="qn-btn" onClick={onClose}>Cerrar</button>
-        <button className="qn-btn qn-btn-primary" onClick={() => downloadInvoiceExcel(db, invoice)}>
-          <Download size={14} /> Descargar Excel
-        </button>
+
+      <div style={{ marginTop: 18 }}>
+        <div className="qn-section-title" style={{ marginBottom: 8 }}>Pagos registrados</div>
+        {(invoice.payments || []).length === 0 ? (
+          <div style={{ fontSize: 12.5, color: C.inkSoft }}>Aún no se ha registrado ningún pago.</div>
+        ) : (
+          <table className="qn-table">
+            <thead><tr><th>Fecha</th><th>Cuenta</th><th>Método</th><th style={{ textAlign: 'right' }}>Monto</th><th></th></tr></thead>
+            <tbody>
+              {invoice.payments.map((p) => {
+                const acc = db.accounts.find((a) => a.id === p.accountId);
+                return (
+                  <tr key={p.id}>
+                    <td>{fmtDate(p.date)}</td>
+                    <td>{acc ? acc.name : '—'}</td>
+                    <td>{p.method || '—'}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(p.amount)}</td>
+                    <td><ConfirmDelete onConfirm={() => onDeletePayment(p.id)} label="Eliminar pago" /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 }}>
+        <ConfirmDelete onConfirm={onDeleteInvoice} label="Eliminar factura completa" />
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="qn-btn" onClick={onClose}>Cerrar</button>
+          <button className="qn-btn qn-btn-primary" onClick={() => downloadInvoiceExcel(db, invoice)}>
+            <Download size={14} /> Descargar Excel
+          </button>
+        </div>
       </div>
     </Modal>
   );
@@ -794,8 +823,9 @@ function buildImportPlan(db, rows) {
         if (!account) {
           errors.push(`Factura ${number} (${first.client}): la cuenta "${accountName}" no existe; se creó sin registrar el pago.`);
         } else {
-          payments.push({ id: uid(), date: first.date, amount: paidAmount, accountId: account.id, method: 'Importado' });
-          newCashMoves.push({ id: uid(), accountId: account.id, date: first.date, amount: paidAmount, concept: `Pago factura ${number} (importado)`, refType: 'venta', refId: invoiceId });
+          const paymentId = uid();
+          payments.push({ id: paymentId, date: first.date, amount: paidAmount, accountId: account.id, method: 'Importado' });
+          newCashMoves.push({ id: uid(), paymentId, accountId: account.id, date: first.date, amount: paidAmount, concept: `Pago factura ${number} (importado)`, refType: 'venta', refId: invoiceId });
         }
       }
     }
@@ -867,10 +897,28 @@ function Ventas({ db, setDb }) {
   const addPayment = (invoiceId, payment) => {
     setDb((prev) => {
       const inv = prev.invoices.find((i) => i.id === invoiceId);
-      const invoices = prev.invoices.map((i) => i.id === invoiceId ? { ...i, payments: [...(i.payments || []), { ...payment, id: uid() }] } : i);
-      const movements = [...prev.movements, { id: uid(), accountId: payment.accountId, date: payment.date, amount: payment.amount, concept: `Pago factura ${inv.number}`, refType: 'venta', refId: invoiceId }];
+      const paymentId = uid();
+      const invoices = prev.invoices.map((i) => i.id === invoiceId ? { ...i, payments: [...(i.payments || []), { ...payment, id: paymentId }] } : i);
+      const movements = [...prev.movements, { id: uid(), paymentId, accountId: payment.accountId, date: payment.date, amount: payment.amount, concept: `Pago factura ${inv.number}`, refType: 'venta', refId: invoiceId }];
       return { ...prev, invoices, movements };
     });
+  };
+
+  const deleteInvoice = (invoiceId) => {
+    setDb((prev) => ({
+      ...prev,
+      invoices: prev.invoices.filter((i) => i.id !== invoiceId),
+      inventoryMovements: (prev.inventoryMovements || []).filter((m) => !(m.refType === 'venta' && m.refId === invoiceId)),
+      movements: prev.movements.filter((m) => !(m.refType === 'venta' && m.refId === invoiceId)),
+    }));
+  };
+
+  const deleteInvoicePayment = (invoiceId, paymentId) => {
+    setDb((prev) => ({
+      ...prev,
+      invoices: prev.invoices.map((i) => i.id === invoiceId ? { ...i, payments: (i.payments || []).filter((p) => p.id !== paymentId) } : i),
+      movements: prev.movements.filter((m) => m.paymentId !== paymentId),
+    }));
   };
 
   return (
@@ -939,9 +987,10 @@ function Ventas({ db, setDb }) {
                     <td><Badge status={statusOf(inv)} /></td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
-                        <button className="qn-btn qn-btn-sm qn-btn-icon" title="Ver" onClick={() => setPreview(inv)}><Eye size={14} /></button>
+                        <button className="qn-btn qn-btn-sm qn-btn-icon" title="Ver" onClick={() => setPreview(inv.id)}><Eye size={14} /></button>
                         <button className="qn-btn qn-btn-sm qn-btn-icon" title="Excel" onClick={() => downloadInvoiceExcel(db, inv)}><FileSpreadsheet size={14} /></button>
                         {bal > 0 && <button className="qn-btn qn-btn-sm" onClick={() => setPayFor(inv)}>Registrar pago</button>}
+                        <ConfirmDelete onConfirm={() => deleteInvoice(inv.id)} label="Eliminar factura" />
                       </div>
                     </td>
                   </tr>
@@ -954,7 +1003,15 @@ function Ventas({ db, setDb }) {
 
       {showNew && <NewSaleModal db={db} setDb={setDb} onClose={() => setShowNew(false)} />}
       {payFor && <PaymentModal db={db} doc={payFor} kind="cxc" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
-      {preview && <InvoicePreview db={db} invoice={preview} onClose={() => setPreview(null)} />}
+      {preview && db.invoices.find((i) => i.id === preview) && (
+        <InvoicePreview
+          db={db}
+          invoice={db.invoices.find((i) => i.id === preview)}
+          onClose={() => setPreview(null)}
+          onDeletePayment={(paymentId) => deleteInvoicePayment(preview, paymentId)}
+          onDeleteInvoice={() => { deleteInvoice(preview); setPreview(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -1023,17 +1080,19 @@ function buildPaymentsImportPlan(db, rows) {
       const idx = invoices.findIndex((i) => i.number.toUpperCase() === ref);
       if (idx === -1) { errors.push(`Fila ${r.rowNum}: no existe la factura ${r.reference}.`); return; }
       const inv = invoices[idx];
-      const payment = { id: uid(), date: r.date, amount: r.amount, accountId: account.id, method: r.method || 'Importado' };
+      const paymentId = uid();
+      const payment = { id: paymentId, date: r.date, amount: r.amount, accountId: account.id, method: r.method || 'Importado' };
       invoices[idx] = { ...inv, payments: [...(inv.payments || []), payment] };
-      newMovements.push({ id: uid(), accountId: account.id, date: r.date, amount: r.amount, concept: `Pago factura ${inv.number} (importado)`, refType: 'venta', refId: inv.id });
+      newMovements.push({ id: uid(), paymentId, accountId: account.id, date: r.date, amount: r.amount, concept: `Pago factura ${inv.number} (importado)`, refType: 'venta', refId: inv.id });
       appliedCount += 1;
     } else if (ref.startsWith('CXP')) {
       const idx = payables.findIndex((p) => p.number.toUpperCase() === ref);
       if (idx === -1) { errors.push(`Fila ${r.rowNum}: no existe la cuenta por pagar ${r.reference}.`); return; }
       const pay = payables[idx];
-      const payment = { id: uid(), date: r.date, amount: r.amount, accountId: account.id, method: r.method || 'Importado' };
+      const paymentId = uid();
+      const payment = { id: paymentId, date: r.date, amount: r.amount, accountId: account.id, method: r.method || 'Importado' };
       payables[idx] = { ...pay, payments: [...(pay.payments || []), payment] };
-      newMovements.push({ id: uid(), accountId: account.id, date: r.date, amount: -r.amount, concept: `Pago ${pay.number} (importado)`, refType: 'cxp', refId: pay.id });
+      newMovements.push({ id: uid(), paymentId, accountId: account.id, date: r.date, amount: -r.amount, concept: `Pago ${pay.number} (importado)`, refType: 'cxp', refId: pay.id });
       appliedCount += 1;
     } else {
       errors.push(`Fila ${r.rowNum}: la referencia "${r.reference}" no empieza con INV (factura) ni CXP (cuenta por pagar).`);
@@ -1111,15 +1170,32 @@ function ImportPaymentsControls({ db, setDb }) {
 /* ============================== CUENTAS POR COBRAR ============================== */
 function CuentasCobrar({ db, setDb }) {
   const [payFor, setPayFor] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [filter, setFilter] = useState('pendientes');
   const rows = db.invoices.filter((inv) => filter === 'todas' ? true : balanceOf(inv) > 0);
   const addPayment = (invoiceId, payment) => {
     setDb((prev) => {
       const inv = prev.invoices.find((i) => i.id === invoiceId);
-      const invoices = prev.invoices.map((i) => i.id === invoiceId ? { ...i, payments: [...(i.payments || []), { ...payment, id: uid() }] } : i);
-      const movements = [...prev.movements, { id: uid(), accountId: payment.accountId, date: payment.date, amount: payment.amount, concept: `Pago factura ${inv.number}`, refType: 'venta', refId: invoiceId }];
+      const paymentId = uid();
+      const invoices = prev.invoices.map((i) => i.id === invoiceId ? { ...i, payments: [...(i.payments || []), { ...payment, id: paymentId }] } : i);
+      const movements = [...prev.movements, { id: uid(), paymentId, accountId: payment.accountId, date: payment.date, amount: payment.amount, concept: `Pago factura ${inv.number}`, refType: 'venta', refId: invoiceId }];
       return { ...prev, invoices, movements };
     });
+  };
+  const deleteInvoice = (invoiceId) => {
+    setDb((prev) => ({
+      ...prev,
+      invoices: prev.invoices.filter((i) => i.id !== invoiceId),
+      inventoryMovements: (prev.inventoryMovements || []).filter((m) => !(m.refType === 'venta' && m.refId === invoiceId)),
+      movements: prev.movements.filter((m) => !(m.refType === 'venta' && m.refId === invoiceId)),
+    }));
+  };
+  const deleteInvoicePayment = (invoiceId, paymentId) => {
+    setDb((prev) => ({
+      ...prev,
+      invoices: prev.invoices.map((i) => i.id === invoiceId ? { ...i, payments: (i.payments || []).filter((p) => p.id !== paymentId) } : i),
+      movements: prev.movements.filter((m) => m.paymentId !== paymentId),
+    }));
   };
   return (
     <div>
@@ -1154,7 +1230,13 @@ function CuentasCobrar({ db, setDb }) {
                     <td>{fmtMoney(inv.total)}</td>
                     <td style={{ fontWeight: 600, color: bal > 0 ? C.rust : C.teal }}>{fmtMoney(bal)}</td>
                     <td><Badge status={statusOf(inv)} /></td>
-                    <td>{bal > 0 && <button className="qn-btn qn-btn-sm" onClick={() => setPayFor(inv)}><ArrowDownCircle size={13} /> Registrar pago</button>}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="qn-btn qn-btn-sm qn-btn-icon" title="Ver" onClick={() => setPreview(inv.id)}><Eye size={14} /></button>
+                        {bal > 0 && <button className="qn-btn qn-btn-sm" onClick={() => setPayFor(inv)}><ArrowDownCircle size={13} /> Registrar pago</button>}
+                        <ConfirmDelete onConfirm={() => deleteInvoice(inv.id)} label="Eliminar factura" />
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -1163,6 +1245,15 @@ function CuentasCobrar({ db, setDb }) {
         )}
       </div>
       {payFor && <PaymentModal db={db} doc={payFor} kind="cxc" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
+      {preview && db.invoices.find((i) => i.id === preview) && (
+        <InvoicePreview
+          db={db}
+          invoice={db.invoices.find((i) => i.id === preview)}
+          onClose={() => setPreview(null)}
+          onDeletePayment={(paymentId) => deleteInvoicePayment(preview, paymentId)}
+          onDeleteInvoice={() => { deleteInvoice(preview); setPreview(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -1240,9 +1331,74 @@ function NewPayableModal({ db, setDb, onClose }) {
   );
 }
 
+function PayableDetail({ db, payable, onClose, onDeletePayment, onDeletePayable }) {
+  const supplier = db.suppliers.find((s) => s.id === payable.supplierId);
+  const bal = balanceOf(payable);
+  return (
+    <Modal title={`Cuenta por pagar ${payable.number}`} onClose={onClose} wide>
+      <div className="qn-row3" style={{ marginBottom: 16 }}>
+        <div>
+          <div className="qn-label">Tipo</div>
+          <div style={{ fontWeight: 600 }}>{payable.type}</div>
+        </div>
+        <div>
+          <div className="qn-label">{payable.type === 'Proveedor' ? 'Proveedor' : 'Concepto'}</div>
+          <div style={{ fontWeight: 600 }}>{payable.type === 'Proveedor' ? (supplier ? supplier.name : '—') : payable.concept}</div>
+        </div>
+        <div>
+          <div className="qn-label">Vence</div>
+          <div style={{ fontWeight: 600 }}>{fmtDate(payable.dueDate)}</div>
+        </div>
+      </div>
+      {payable.type === 'Proveedor' && payable.concept && (
+        <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 16 }}>{payable.concept}</div>
+      )}
+      <div style={{ display: 'flex', gap: 40, marginBottom: 20, paddingBottom: 14, borderBottom: `1px solid ${C.line}` }}>
+        <div>
+          <div className="qn-label">Total</div>
+          <div className="qn-display" style={{ fontSize: 18, fontWeight: 700 }}>{fmtCOP(payable.total)}</div>
+        </div>
+        <div>
+          <div className="qn-label">Saldo pendiente</div>
+          <div className="qn-display" style={{ fontSize: 18, fontWeight: 700, color: bal > 0 ? C.rust : C.teal }}>{fmtCOP(bal)}</div>
+        </div>
+      </div>
+
+      <div className="qn-section-title" style={{ marginBottom: 8 }}>Pagos registrados</div>
+      {(payable.payments || []).length === 0 ? (
+        <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 8 }}>Aún no se ha registrado ningún pago.</div>
+      ) : (
+        <table className="qn-table">
+          <thead><tr><th>Fecha</th><th>Cuenta</th><th>Método</th><th style={{ textAlign: 'right' }}>Monto</th><th></th></tr></thead>
+          <tbody>
+            {payable.payments.map((p) => {
+              const acc = db.accounts.find((a) => a.id === p.accountId);
+              return (
+                <tr key={p.id}>
+                  <td>{fmtDate(p.date)}</td>
+                  <td>{acc ? acc.name : '—'}</td>
+                  <td>{p.method || '—'}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(p.amount)}</td>
+                  <td><ConfirmDelete onConfirm={() => onDeletePayment(p.id)} label="Eliminar pago" /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 }}>
+        <ConfirmDelete onConfirm={onDeletePayable} label="Eliminar cuenta por pagar completa" />
+        <button className="qn-btn" onClick={onClose}>Cerrar</button>
+      </div>
+    </Modal>
+  );
+}
+
 function CuentasPagar({ db, setDb }) {
   const [showNew, setShowNew] = useState(false);
   const [payFor, setPayFor] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [filter, setFilter] = useState('pendientes');
   const rows = db.payables.filter((p) => filter === 'todas' ? true : balanceOf(p) > 0);
 
@@ -1261,10 +1417,27 @@ function CuentasPagar({ db, setDb }) {
   const addPayment = (payableId, payment) => {
     setDb((prev) => {
       const doc = prev.payables.find((p) => p.id === payableId);
-      const payables = prev.payables.map((p) => p.id === payableId ? { ...p, payments: [...(p.payments || []), { ...payment, id: uid() }] } : p);
-      const movements = [...prev.movements, { id: uid(), accountId: payment.accountId, date: payment.date, amount: -Math.abs(payment.amount), concept: `Pago ${doc.number} · ${doc.concept || doc.type}`, refType: 'cxp', refId: payableId }];
+      const paymentId = uid();
+      const payables = prev.payables.map((p) => p.id === payableId ? { ...p, payments: [...(p.payments || []), { ...payment, id: paymentId }] } : p);
+      const movements = [...prev.movements, { id: uid(), paymentId, accountId: payment.accountId, date: payment.date, amount: -Math.abs(payment.amount), concept: `Pago ${doc.number} · ${doc.concept || doc.type}`, refType: 'cxp', refId: payableId }];
       return { ...prev, payables, movements };
     });
+  };
+
+  const deletePayable = (payableId) => {
+    setDb((prev) => ({
+      ...prev,
+      payables: prev.payables.filter((p) => p.id !== payableId),
+      movements: prev.movements.filter((m) => !(m.refType === 'cxp' && m.refId === payableId)),
+    }));
+  };
+
+  const deletePayablePayment = (payableId, paymentId) => {
+    setDb((prev) => ({
+      ...prev,
+      payables: prev.payables.map((p) => p.id === payableId ? { ...p, payments: (p.payments || []).filter((x) => x.id !== paymentId) } : p),
+      movements: prev.movements.filter((m) => m.paymentId !== paymentId),
+    }));
   };
 
   return (
@@ -1321,7 +1494,13 @@ function CuentasPagar({ db, setDb }) {
                     <td>{fmtMoney(p.total)}</td>
                     <td style={{ fontWeight: 600, color: bal > 0 ? C.rust : C.teal }}>{fmtMoney(bal)}</td>
                     <td><Badge status={statusOf(p)} /></td>
-                    <td>{bal > 0 && <button className="qn-btn qn-btn-sm" onClick={() => setPayFor(p)}><ArrowUpCircle size={13} /> Registrar pago</button>}</td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="qn-btn qn-btn-sm qn-btn-icon" title="Ver" onClick={() => setPreview(p.id)}><Eye size={14} /></button>
+                        {bal > 0 && <button className="qn-btn qn-btn-sm" onClick={() => setPayFor(p)}><ArrowUpCircle size={13} /> Registrar pago</button>}
+                        <ConfirmDelete onConfirm={() => deletePayable(p.id)} label="Eliminar" />
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -1331,6 +1510,15 @@ function CuentasPagar({ db, setDb }) {
       </div>
       {showNew && <NewPayableModal db={db} setDb={setDb} onClose={() => setShowNew(false)} />}
       {payFor && <PaymentModal db={db} doc={payFor} kind="cxp" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
+      {preview && db.payables.find((p) => p.id === preview) && (
+        <PayableDetail
+          db={db}
+          payable={db.payables.find((p) => p.id === preview)}
+          onClose={() => setPreview(null)}
+          onDeletePayment={(paymentId) => deletePayablePayment(preview, paymentId)}
+          onDeletePayable={() => { deletePayable(preview); setPreview(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -1379,8 +1567,9 @@ function NewPurchaseModal({ db, setDb, onClose }) {
       };
       const cashMoves = [];
       if (paidNow) {
-        payable.payments.push({ id: uid(), date, amount: total, accountId, method: 'Efectivo/Transferencia' });
-        cashMoves.push({ id: uid(), accountId, date, amount: -total, concept: `Compra ${product?.name || ''} · ${payable.number}`, refType: 'cxp', refId: payable.id });
+        const paymentId = uid();
+        payable.payments.push({ id: paymentId, date, amount: total, accountId, method: 'Efectivo/Transferencia' });
+        cashMoves.push({ id: uid(), paymentId, accountId, date, amount: -total, concept: `Compra ${product?.name || ''} · ${payable.number}`, refType: 'cxp', refId: payable.id });
       }
       const invMove = { id: uid(), productId: prodId, date, qty: Number(qty), unitCost: Number(unitCost), type: 'compra', refType: 'compra', refId: payable.id };
       return {
@@ -2151,7 +2340,7 @@ function Dashboard({ db }) {
   );
 }
 
-/* ============================== APP ============================== */
+/* ============================== APP (Supabase + auth) ============================== */
 function LoadingScreen({ text }) {
   return (
     <div className="qn-root" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
