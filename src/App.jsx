@@ -8,7 +8,7 @@ import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, ShoppingCart, ArrowDownCircle, ArrowUpCircle, Wallet,
   Boxes, FileSpreadsheet, Scale, TrendingUp, Plus, X, Search, Trash2,
-  Download, Eye, Landmark, Check, Package, History, Upload, Pencil, Users, ChevronDown, ChevronUp,
+  Download, Eye, Landmark, Check, Package, History, Upload, Pencil, Users, ChevronDown, ChevronUp, AlertTriangle,
 } from 'lucide-react';
 
 const LOGO_SRC = '/logo.webp';
@@ -2122,8 +2122,51 @@ function SimpleCrud({ title, items, columns, onAdd, onDelete, addFields }) {
   );
 }
 
+function ResetAllModal({ onClose, onConfirm }) {
+  const [text, setText] = useState('');
+  const ok = text.trim().toUpperCase() === 'ELIMINAR TODO';
+  return (
+    <Modal title="Eliminar toda la información" onClose={onClose}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16, padding: 12, background: C.rustFaint, borderRadius: 8 }}>
+        <AlertTriangle size={18} color={C.rust} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div style={{ fontSize: 13, color: C.ink }}>
+          Esto borra <strong>todas</strong> las ventas, cuentas por cobrar y por pagar, inventario, movimientos de caja, clientes, productos y proveedores. <strong>No se puede deshacer.</strong> Los datos de tu empresa (nombre, dirección, contacto) se mantienen.
+        </div>
+      </div>
+      <div className="qn-field">
+        <label className="qn-label">Escribe ELIMINAR TODO para confirmar</label>
+        <input className="qn-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="ELIMINAR TODO" autoFocus />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button className="qn-btn" onClick={onClose}>Cancelar</button>
+        <button className="qn-btn qn-btn-danger" disabled={!ok} onClick={() => { onConfirm(); onClose(); }}>
+          <Trash2 size={14} /> Eliminar todo definitivamente
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function Maestros({ db, setDb }) {
   const [tab, setTab] = useState('clientes');
+  const [showReset, setShowReset] = useState(false);
+
+  const resetAllData = () => {
+    setDb((prev) => ({
+      company: prev.company,
+      nextInvoiceNumber: 1,
+      nextBillNumber: 1,
+      clients: [],
+      products: [],
+      suppliers: [],
+      accounts: [],
+      invoices: [],
+      payables: [],
+      movements: [],
+      inventoryMovements: [],
+    }));
+  };
+
   return (
     <div>
       <div className="qn-page-head">
@@ -2167,6 +2210,18 @@ function Maestros({ db, setDb }) {
           onDelete={(id) => setDb((p) => ({ ...p, suppliers: p.suppliers.filter((s) => s.id !== id) }))}
         />
       )}
+
+      <div className="qn-card qn-section" style={{ marginTop: 24, borderColor: C.rust }}>
+        <div className="qn-section-title" style={{ color: C.rust }}>Zona de peligro</div>
+        <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 14 }}>
+          Elimina permanentemente toda la información del sistema (ventas, cuentas por cobrar y por pagar, inventario, caja y bancos, clientes, productos y proveedores). Los datos de tu empresa se conservan.
+        </div>
+        <button className="qn-btn qn-btn-danger" onClick={() => setShowReset(true)}>
+          <Trash2 size={14} /> Eliminar toda la información del sistema
+        </button>
+      </div>
+
+      {showReset && <ResetAllModal onClose={() => setShowReset(false)} onConfirm={resetAllData} />}
     </div>
   );
 }
@@ -2729,4 +2784,3 @@ export default function Root() {
   if (!session) return <LoginScreen />;
   return <App userId={session.user.id} />;
 }
-
