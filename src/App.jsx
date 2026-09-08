@@ -554,7 +554,7 @@ function NewSaleModal({ db, setDb, onClose }) {
   const [date, setDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState(addDays(todayISO(), 30));
   const [items, setItems] = useState([{ id: uid(), productId: '', description: '', lote: '', rate: 0, qty: 1, unit: 'Unidades', total: 0 }]);
-  const [showNewClient, setShowNewClient] = useState(false);
+  const [showNewClient, setShowNewClient] = useState(db.clients.length === 0);
   const [ncName, setNcName] = useState('');
   const [ncPhone, setNcPhone] = useState('');
 
@@ -625,7 +625,7 @@ function NewSaleModal({ db, setDb, onClose }) {
           ) : (
             <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
               <button className="qn-linklike" onClick={saveClient}><Check size={12} /> Guardar</button>
-              <button className="qn-linklike" style={{ color: C.inkSoft }} onClick={() => setShowNewClient(false)}>Cancelar</button>
+              {db.clients.length > 0 && <button className="qn-linklike" style={{ color: C.inkSoft }} onClick={() => setShowNewClient(false)}>Cancelar</button>}
             </div>
           )}
         </div>
@@ -679,7 +679,7 @@ function EditSaleModal({ db, setDb, invoice, onClose }) {
   const [date, setDate] = useState(invoice.date);
   const [dueDate, setDueDate] = useState(invoice.dueDate);
   const [items, setItems] = useState(invoice.items.map((it) => ({ ...it })));
-  const [showNewClient, setShowNewClient] = useState(false);
+  const [showNewClient, setShowNewClient] = useState(db.clients.length === 0);
   const [ncName, setNcName] = useState('');
   const [ncPhone, setNcPhone] = useState('');
 
@@ -746,7 +746,7 @@ function EditSaleModal({ db, setDb, invoice, onClose }) {
           ) : (
             <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
               <button className="qn-linklike" onClick={saveClient}><Check size={12} /> Guardar</button>
-              <button className="qn-linklike" style={{ color: C.inkSoft }} onClick={() => setShowNewClient(false)}>Cancelar</button>
+              {db.clients.length > 0 && <button className="qn-linklike" style={{ color: C.inkSoft }} onClick={() => setShowNewClient(false)}>Cancelar</button>}
             </div>
           )}
         </div>
