@@ -8,7 +8,7 @@ import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, ShoppingCart, ArrowDownCircle, ArrowUpCircle, Wallet,
   Boxes, FileSpreadsheet, Scale, TrendingUp, Plus, X, Search, Trash2,
-  Download, Eye, Landmark, Check, Package, History, Upload, Pencil, Users, ChevronDown, ChevronUp, AlertTriangle,
+  Download, Eye, Landmark, Check, Package, History, Upload, Pencil, Users, ChevronDown, ChevronUp, AlertTriangle, Printer,
 } from 'lucide-react';
 
 const LOGO_SRC = '/logo.webp';
@@ -248,6 +248,12 @@ function GlobalStyle() {
       .qn-invoice-sheet .meta-r .v { font-size: 13px; font-weight: 600; margin-top: 2px; }
       .qn-invoice-sheet .meta-r .v.big { font-size: 16px; }
       .qn-invoice-sheet .logo-mark { width: 44px; height: 44px; object-fit: contain; margin-bottom: 8px; }
+
+      @media print {
+        body * { visibility: hidden; }
+        .qn-invoice-sheet, .qn-invoice-sheet * { visibility: visible; }
+        .qn-invoice-sheet { position: absolute; top: 0; left: 0; width: 100%; padding: 24px; border: none; box-shadow: none; }
+      }
     `}</style>
   );
 }
@@ -489,6 +495,9 @@ function InvoicePreview({ db, invoice, onClose, onDeletePayment, onDeleteInvoice
         <ConfirmDelete onConfirm={onDeleteInvoice} label="Eliminar factura completa" />
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="qn-btn" onClick={onClose}>Cerrar</button>
+          <button className="qn-btn" onClick={() => window.print()}>
+            <Printer size={14} /> Descargar PDF
+          </button>
           <button className="qn-btn qn-btn-primary" onClick={() => downloadInvoiceExcel(db, invoice)}>
             <Download size={14} /> Descargar Excel
           </button>
