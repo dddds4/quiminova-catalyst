@@ -508,13 +508,26 @@ function InvoicePreview({ db, invoice, onClose, onDeletePayment, onDeleteInvoice
 }
 
 /* ============================== PAYMENT MODAL (shared CXC / CXP) ============================== */
-function PaymentModal({ db, doc, kind, onClose, onSave }) {
+function PaymentModal({ db, setDb, doc, kind, onClose, onSave }) {
   const bal = balanceOf(doc);
   const [amount, setAmount] = useState(bal > 0 ? bal : 0);
   const [date, setDate] = useState(todayISO());
   const [accountId, setAccountId] = useState(db.accounts[0]?.id || '');
   const [method, setMethod] = useState('Transferencia');
+  const [showNewAccount, setShowNewAccount] = useState(db.accounts.length === 0);
+  const [naName, setNaName] = useState('');
+  const [naType, setNaType] = useState('Banco');
   const label = kind === 'cxc' ? 'Cuenta destino (recibe el dinero)' : 'Cuenta origen (sale el dinero)';
+
+  const saveAccount = () => {
+    if (!naName.trim()) return;
+    const acc = { id: uid(), name: naName.trim(), type: naType, initialBalance: 0 };
+    setDb((prev) => ({ ...prev, accounts: [...prev.accounts, acc] }));
+    setAccountId(acc.id);
+    setShowNewAccount(false);
+    setNaName('');
+  };
+
   return (
     <Modal title={`Registrar pago · ${doc.number}`} onClose={onClose}>
       <div className="qn-field">
@@ -533,9 +546,26 @@ function PaymentModal({ db, doc, kind, onClose, onSave }) {
       </div>
       <div className="qn-field">
         <label className="qn-label">{label}</label>
-        <select className="qn-select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-          {db.accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.type})</option>)}
-        </select>
+        {!showNewAccount ? (
+          <select className="qn-select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            {db.accounts.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.type})</option>)}
+          </select>
+        ) : (
+          <div className="qn-row2">
+            <input className="qn-input" placeholder="Nombre de la cuenta" value={naName} onChange={(e) => setNaName(e.target.value)} />
+            <select className="qn-select" value={naType} onChange={(e) => setNaType(e.target.value)}>
+              <option>Caja</option><option>Banco</option><option>Billetera</option>
+            </select>
+          </div>
+        )}
+        {!showNewAccount ? (
+          <button className="qn-linklike" style={{ marginTop: 6 }} onClick={() => setShowNewAccount(true)}><Plus size={12} /> Nueva cuenta</button>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <button className="qn-linklike" onClick={saveAccount}><Check size={12} /> Guardar</button>
+            {db.accounts.length > 0 && <button className="qn-linklike" style={{ color: C.inkSoft }} onClick={() => setShowNewAccount(false)}>Cancelar</button>}
+          </div>
+        )}
       </div>
       <div className="qn-field">
         <label className="qn-label">Método</label>
@@ -1156,7 +1186,7 @@ function Ventas({ db, setDb }) {
       {editing && db.invoices.find((i) => i.id === editing) && (
         <EditSaleModal db={db} setDb={setDb} invoice={db.invoices.find((i) => i.id === editing)} onClose={() => setEditing(null)} />
       )}
-      {payFor && <PaymentModal db={db} doc={payFor} kind="cxc" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
+      {payFor && <PaymentModal db={db} setDb={setDb} doc={payFor} kind="cxc" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
       {preview && db.invoices.find((i) => i.id === preview) && (
         <InvoicePreview
           db={db}
@@ -1406,7 +1436,7 @@ function CuentasCobrar({ db, setDb }) {
           </table>
         )}
       </div>
-      {payFor && <PaymentModal db={db} doc={payFor} kind="cxc" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
+      {payFor && <PaymentModal db={db} setDb={setDb} doc={payFor} kind="cxc" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
       {preview && db.invoices.find((i) => i.id === preview) && (
         <InvoicePreview
           db={db}
@@ -1759,7 +1789,7 @@ function CuentasPagar({ db, setDb }) {
         )}
       </div>
       {showNew && <NewPayableModal db={db} setDb={setDb} onClose={() => setShowNew(false)} />}
-      {payFor && <PaymentModal db={db} doc={payFor} kind="cxp" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
+      {payFor && <PaymentModal db={db} setDb={setDb} doc={payFor} kind="cxp" onClose={() => setPayFor(null)} onSave={(p) => addPayment(payFor.id, p)} />}
       {preview && db.payables.find((p) => p.id === preview) && (
         <PayableDetail
           db={db}
