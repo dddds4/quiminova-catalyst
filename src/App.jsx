@@ -2728,14 +2728,16 @@ function App({ userId }) {
   const [db, setDb] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [conflict, setConflict] = useState(false);
   const [tab, setTab] = useState('dashboard');
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
+  const versionRef = useRef(null); // último updated_at que sabemos que está en la base de datos
 
   useEffect(() => {
     let cancelled = false;
     async function load(attempt) {
-      const { data, error } = await supabase.from('app_data').select('data').eq('user_id', userId).maybeSingle();
+      const { data, error } = await supabase.from('app_data').select('data, updated_at').eq('user_id', userId).maybeSingle();
       if (cancelled) return;
       if (error) {
         if (attempt < 2) { setTimeout(() => load(attempt + 1), 600); return; }
@@ -2744,33 +2746,47 @@ function App({ userId }) {
       }
       if (data && data.data) {
         setDb(data.data);
+        versionRef.current = data.updated_at;
         return;
       }
+      const nowIso = new Date().toISOString();
       const seed = seedData();
-      const { error: upsertError } = await supabase.from('app_data').upsert({ user_id: userId, data: seed, updated_at: new Date().toISOString() });
+      const { error: upsertError } = await supabase.from('app_data').upsert({ user_id: userId, data: seed, updated_at: nowIso });
       if (cancelled) return;
       if (upsertError) {
         setLoadError('No se pudo inicializar tu información: ' + upsertError.message);
         return;
       }
       setDb(seed);
+      versionRef.current = nowIso;
     }
     setLoadError(null);
+    setConflict(false);
     load(0);
     return () => { cancelled = true; };
   }, [userId, reloadKey]);
 
   useEffect(() => {
-    if (!db) return;
+    if (!db || conflict) return;
     if (firstLoad.current) { firstLoad.current = false; return; }
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      supabase.from('app_data').upsert({ user_id: userId, data: db, updated_at: new Date().toISOString() }).then(({ error }) => {
-        if (error) console.error('Error guardando en Supabase:', error);
-      });
+    saveTimer.current = setTimeout(async () => {
+      const nowIso = new Date().toISOString();
+      // Solo guarda si nadie más ha guardado desde la última vez que leímos — si alguien más
+      // guardó primero (otra pestaña/dispositivo), esto no actualiza ninguna fila y avisamos
+      // en vez de sobrescribir en silencio.
+      const { data, error } = await supabase
+        .from('app_data')
+        .update({ data: db, updated_at: nowIso })
+        .eq('user_id', userId)
+        .eq('updated_at', versionRef.current)
+        .select('updated_at');
+      if (error) { console.error('Error guardando en Supabase:', error); return; }
+      if (!data || data.length === 0) { setConflict(true); return; }
+      versionRef.current = nowIso;
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [db, userId]);
+  }, [db, userId, conflict]);
 
   if (loadError) {
     return (
@@ -2790,6 +2806,17 @@ function App({ userId }) {
   return (
     <div className="qn-root">
       <GlobalStyle />
+      {conflict && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(16,42,67,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="qn-card qn-section" style={{ maxWidth: 420, textAlign: 'center' }}>
+            <div style={{ fontWeight: 700, marginBottom: 8, fontFamily: "'Space Grotesk', sans-serif" }}>Hay cambios más recientes</div>
+            <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 18 }}>
+              Se guardó información más nueva desde otra pestaña o dispositivo. Para no perder esos cambios, tus últimas ediciones aquí no se guardaron. Recarga la página para ver la versión más reciente y seguir trabajando.
+            </div>
+            <button className="qn-btn qn-btn-primary" onClick={() => window.location.reload()}>Recargar página</button>
+          </div>
+        </div>
+      )}
       <div className="qn-shell">
         <Sidebar tab={tab} setTab={setTab} company={db.company} />
         <div className="qn-main">
