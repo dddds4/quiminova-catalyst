@@ -2800,6 +2800,11 @@ function Dashboard({ db }) {
   const pyg = computePYG(db, currentMonth);
   const cobradoMes = db.invoices.reduce((s, i) => s + (i.payments || []).filter((p) => p.date.slice(0, 7) === currentMonth).reduce((a, p) => a + p.amount, 0), 0);
 
+  const prevMonthDate = new Date(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)) - 2, 1);
+  const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const prevVentas = db.invoices.filter((i) => i.date.slice(0, 7) === prevMonthKey).reduce((s, i) => s + i.total, 0);
+  const ventasDelta = prevVentas > 0 ? ((ventasMes - prevVentas) / prevVentas) * 100 : null;
+
   const daysInMonth = new Date(Number(currentMonth.slice(0, 4)), Number(currentMonth.slice(5, 7)), 0).getDate();
   const dailySeries = Array.from({ length: daysInMonth }, (_, idx) => {
     const day = idx + 1;
@@ -2815,6 +2820,13 @@ function Dashboard({ db }) {
   const upcomingAR = [...db.invoices].filter((i) => balanceOf(i) > 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 5);
   const upcomingAP = [...db.payables].filter((p) => balanceOf(p) > 0).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 5);
 
+  const initials = (name) => (name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  const Avatar = ({ name, color }) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: '50%', background: color || C.tealFaint, color: color ? '#fff' : C.teal, fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>
+      {initials(name)}
+    </span>
+  );
+
   return (
     <div>
       <div className="qn-page-head">
@@ -2824,11 +2836,40 @@ function Dashboard({ db }) {
         </div>
       </div>
 
-      <div className="qn-stats-row">
-        <div className="qn-card qn-stat">
-          <div className="label"><span className="qn-stat-icon"><TrendingUp size={12} /></span>Ventas del mes</div>
-          <div className="value" style={{ color: C.teal }}>{fmtMoney(ventasMes)}</div>
+      {/* Métrica destacada */}
+      <div
+        className="qn-card"
+        style={{
+          background: `linear-gradient(120deg, ${C.teal} 0%, #0B3E39 100%)`,
+          color: '#fff', border: 'none', padding: '22px 26px', marginBottom: 18,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', boxShadow: 'var(--qn-shadow-md)',
+        }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, opacity: 0.75, marginBottom: 10, fontWeight: 500 }}>
+            <TrendingUp size={14} /> Ventas del mes
+          </div>
+          <div className="qn-display" style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1 }}>{fmtMoney(ventasMes)}</div>
+          {ventasDelta !== null && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 12, fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 20, background: ventasDelta >= 0 ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.18)' }}>
+              {ventasDelta >= 0 ? '↑' : '↓'} {Math.abs(ventasDelta).toFixed(1)}% vs. {monthLabel(prevMonthKey)}
+            </div>
+          )}
         </div>
+        {dailySeries.some((d) => d.total > 0) && (
+          <AreaChart width={180} height={64} data={dailySeries}>
+            <defs>
+              <linearGradient id="qnHeroArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#fff" stopOpacity={0.55} />
+                <stop offset="100%" stopColor="#fff" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <Area type="monotone" dataKey="total" stroke="#fff" strokeWidth={2} fill="url(#qnHeroArea)" />
+          </AreaChart>
+        )}
+      </div>
+
+      <div className="qn-stats-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div className="qn-card qn-stat">
           <div className="label"><span className="qn-stat-icon"><ArrowDownCircle size={12} /></span>Cobrado en el mes</div>
           <div className="value">{fmtMoney(cobradoMes)}</div>
@@ -2859,8 +2900,11 @@ function Dashboard({ db }) {
       </div>
 
       <div className="qn-row2" style={{ alignItems: 'start', marginBottom: 4 }}>
-        <div className="qn-card qn-section">
-          <div className="qn-section-title">Ventas por día · {monthLabel(currentMonth)}</div>
+        <div className="qn-card qn-section" style={{ borderTop: `3px solid ${C.tealBright}` }}>
+          <div className="qn-section-title">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><TrendingUp size={14} color={C.teal} /> Ventas por día</span>
+            <span style={{ fontSize: 11, fontWeight: 500, color: C.inkSoft, textTransform: 'capitalize' }}>{monthLabel(currentMonth)}</span>
+          </div>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={dailySeries} margin={{ left: -20, right: 10, top: 5 }}>
               <defs>
@@ -2872,21 +2916,24 @@ function Dashboard({ db }) {
               <CartesianGrid stroke={C.line} vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 11, fill: C.inkSoft }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: C.inkSoft }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000000 ? `${v / 1000000}M` : v} />
-              <Tooltip formatter={(v) => fmtMoney(v)} labelFormatter={(d) => `Día ${d}`} contentStyle={{ borderRadius: 8, border: `1px solid ${C.line}`, fontSize: 12 }} />
-              <Area type="monotone" dataKey="total" stroke={C.tealBright} strokeWidth={2} fill="url(#qnArea)" />
+              <Tooltip formatter={(v) => fmtMoney(v)} labelFormatter={(d) => `Día ${d}`} contentStyle={{ borderRadius: 10, border: `1px solid ${C.line}`, fontSize: 12, boxShadow: 'var(--qn-shadow-md)' }} />
+              <Area type="monotone" dataKey="total" stroke={C.tealBright} strokeWidth={2.5} fill="url(#qnArea)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        <div className="qn-card qn-section">
-          <div className="qn-section-title">Top productos (histórico)</div>
+        <div className="qn-card qn-section" style={{ borderTop: `3px solid ${C.teal}` }}>
+          <div className="qn-section-title">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Package size={14} color={C.teal} /> Top productos</span>
+            <span style={{ fontSize: 11, fontWeight: 500, color: C.inkSoft }}>Histórico</span>
+          </div>
           {topProducts.length === 0 ? <Empty title="Sin datos aún" sub="Aparecerá cuando registres ventas." /> : (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={topProducts} layout="vertical" margin={{ left: 10, right: 20, top: 5 }}>
                 <CartesianGrid stroke={C.line} horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 11, fill: C.inkSoft }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000000 ? `${v / 1000000}M` : v} />
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11.5, fill: C.ink }} axisLine={false} tickLine={false} width={110} />
-                <Tooltip formatter={(v) => fmtMoney(v)} contentStyle={{ borderRadius: 8, border: `1px solid ${C.line}`, fontSize: 12 }} />
-                <Bar dataKey="total" fill={C.teal} radius={[0, 4, 4, 0]} barSize={16} />
+                <Tooltip formatter={(v) => fmtMoney(v)} contentStyle={{ borderRadius: 10, border: `1px solid ${C.line}`, fontSize: 12, boxShadow: 'var(--qn-shadow-md)' }} />
+                <Bar dataKey="total" fill={C.teal} radius={[0, 6, 6, 0]} barSize={16} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -2895,18 +2942,21 @@ function Dashboard({ db }) {
 
       <div className="qn-row2" style={{ alignItems: 'start' }}>
         <div className="qn-card qn-section">
-          <div className="qn-section-title">Próximas a vencer · por cobrar</div>
+          <div className="qn-section-title">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><ArrowDownCircle size={14} color={C.rust} /> Próximas a vencer · por cobrar</span>
+          </div>
           {upcomingAR.length === 0 ? <Empty title="Nada pendiente" sub="No hay facturas con saldo por cobrar." /> : (
             <table className="qn-table">
+              <thead><tr><th>Factura</th><th>Cliente</th><th>Vence</th><th style={{ textAlign: 'right' }}>Saldo</th><th>Estado</th></tr></thead>
               <tbody>
                 {upcomingAR.map((inv) => {
                   const client = db.clients.find((c) => c.id === inv.clientId);
                   return (
                     <tr key={inv.id}>
-                      <td className="qn-mono" style={{ width: 80 }}>{inv.number}</td>
-                      <td>{client ? client.name : '—'}</td>
-                      <td>{fmtDate(inv.dueDate)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(balanceOf(inv))}</td>
+                      <td className="qn-mono" style={{ color: C.inkSoft, fontSize: 11.5 }}>{inv.number}</td>
+                      <td><span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Avatar name={client ? client.name : '?'} />{client ? client.name : '—'}</span></td>
+                      <td style={{ fontSize: 12.5, color: C.inkSoft }}>{fmtDate(inv.dueDate)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtMoney(balanceOf(inv))}</td>
                       <td><Badge status={statusOf(inv)} /></td>
                     </tr>
                   );
@@ -2916,18 +2966,22 @@ function Dashboard({ db }) {
           )}
         </div>
         <div className="qn-card qn-section">
-          <div className="qn-section-title">Próximas a vencer · por pagar</div>
+          <div className="qn-section-title">
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><ArrowUpCircle size={14} color={C.amber} /> Próximas a vencer · por pagar</span>
+          </div>
           {upcomingAP.length === 0 ? <Empty title="Nada pendiente" sub="No hay cuentas por pagar activas." /> : (
             <table className="qn-table">
+              <thead><tr><th>Ref.</th><th>Proveedor / concepto</th><th>Vence</th><th style={{ textAlign: 'right' }}>Saldo</th><th>Estado</th></tr></thead>
               <tbody>
                 {upcomingAP.map((p) => {
                   const s = db.suppliers.find((x) => x.id === p.supplierId);
+                  const name = p.type === 'Proveedor' ? (s ? s.name : '—') : p.concept;
                   return (
                     <tr key={p.id}>
-                      <td className="qn-mono" style={{ width: 80 }}>{p.number}</td>
-                      <td>{p.type === 'Proveedor' ? (s ? s.name : '—') : p.concept}</td>
-                      <td>{fmtDate(p.dueDate)}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtMoney(balanceOf(p))}</td>
+                      <td className="qn-mono" style={{ color: C.inkSoft, fontSize: 11.5 }}>{p.number}</td>
+                      <td><span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Avatar name={name} color={C.amber} />{name}</span></td>
+                      <td style={{ fontSize: 12.5, color: C.inkSoft }}>{fmtDate(p.dueDate)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtMoney(balanceOf(p))}</td>
                       <td><Badge status={statusOf(p)} /></td>
                     </tr>
                   );
