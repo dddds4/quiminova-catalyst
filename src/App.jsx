@@ -623,19 +623,28 @@ function NewSaleModal({ db, setDb, onClose }) {
   };
 
   const save = () => {
-    if (!clientId || items.length === 0 || total <= 0) return;
+    const hasNewClient = showNewClient && ncName.trim();
+    if ((!clientId && !hasNewClient) || items.length === 0 || total <= 0) return;
     setDb((prev) => {
+      let clients = prev.clients;
+      let finalClientId = clientId;
+      if (hasNewClient) {
+        const nc = { id: uid(), name: ncName.trim(), nit: '', phone: ncPhone.trim(), email: '', address: '' };
+        clients = [...clients, nc];
+        finalClientId = nc.id;
+      }
       const number = 'INV' + String(prev.nextInvoiceNumber).padStart(4, '0');
       const finalItems = items.map((it) => ({
         id: it.id, description: it.description, lote: it.lote, rate: Number(it.rate), qty: Number(it.qty), unit: it.unit, total: it.total,
         productId: it.productId || null, cost: it.productId ? avgCostOf(prev, it.productId) : 0,
       }));
-      const invoice = { id: uid(), number, date, dueDate, clientId, items: finalItems, total, payments: [] };
+      const invoice = { id: uid(), number, date, dueDate, clientId: finalClientId, items: finalItems, total, payments: [] };
       const invMoves = finalItems.filter((it) => it.productId).map((it) => ({
         id: uid(), productId: it.productId, date, qty: -it.qty, unitCost: it.cost, type: 'venta', refType: 'venta', refId: invoice.id,
       }));
       return {
         ...prev,
+        clients,
         invoices: [invoice, ...prev.invoices],
         inventoryMovements: [...(prev.inventoryMovements || []), ...invMoves],
         nextInvoiceNumber: prev.nextInvoiceNumber + 1,
@@ -705,7 +714,7 @@ function NewSaleModal({ db, setDb, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="qn-btn" onClick={onClose}>Cancelar</button>
-          <button className="qn-btn qn-btn-primary" disabled={!clientId || total <= 0} onClick={save}><Check size={14} /> Guardar venta</button>
+          <button className="qn-btn qn-btn-primary" disabled={(!clientId && !(showNewClient && ncName.trim())) || total <= 0} onClick={save}><Check size={14} /> Guardar venta</button>
         </div>
       </div>
     </Modal>
@@ -748,19 +757,27 @@ function EditSaleModal({ db, setDb, invoice, onClose }) {
   };
 
   const save = () => {
-    if (!clientId || items.length === 0 || total <= 0) return;
+    const hasNewClient = showNewClient && ncName.trim();
+    if ((!clientId && !hasNewClient) || items.length === 0 || total <= 0) return;
     setDb((prev) => {
+      let clients = prev.clients;
+      let finalClientId = clientId;
+      if (hasNewClient) {
+        const nc = { id: uid(), name: ncName.trim(), nit: '', phone: ncPhone.trim(), email: '', address: '' };
+        clients = [...clients, nc];
+        finalClientId = nc.id;
+      }
       const finalItems = items.map((it) => ({
         id: it.id || uid(), description: it.description, lote: it.lote, rate: Number(it.rate), qty: Number(it.qty), unit: it.unit, total: it.total,
         productId: it.productId || null, cost: it.productId ? avgCostOf(prev, it.productId) : 0,
       }));
-      const invoices = prev.invoices.map((i) => i.id === invoice.id ? { ...i, date, dueDate, clientId, items: finalItems, total } : i);
+      const invoices = prev.invoices.map((i) => i.id === invoice.id ? { ...i, date, dueDate, clientId: finalClientId, items: finalItems, total } : i);
       // Reconstruye los movimientos de inventario de esta factura para que coincidan con los artículos editados
       const otherInvMoves = (prev.inventoryMovements || []).filter((m) => !(m.refType === 'venta' && m.refId === invoice.id));
       const newInvMoves = finalItems.filter((it) => it.productId).map((it) => ({
         id: uid(), productId: it.productId, date, qty: -it.qty, unitCost: it.cost, type: 'venta', refType: 'venta', refId: invoice.id,
       }));
-      return { ...prev, invoices, inventoryMovements: [...otherInvMoves, ...newInvMoves] };
+      return { ...prev, clients, invoices, inventoryMovements: [...otherInvMoves, ...newInvMoves] };
     });
     onClose();
   };
@@ -826,7 +843,7 @@ function EditSaleModal({ db, setDb, invoice, onClose }) {
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="qn-btn" onClick={onClose}>Cancelar</button>
-          <button className="qn-btn qn-btn-primary" disabled={!clientId || total <= 0} onClick={save}><Check size={14} /> Guardar cambios</button>
+          <button className="qn-btn qn-btn-primary" disabled={(!clientId && !(showNewClient && ncName.trim())) || total <= 0} onClick={save}><Check size={14} /> Guardar cambios</button>
         </div>
       </div>
     </Modal>
