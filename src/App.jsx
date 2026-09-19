@@ -2573,9 +2573,83 @@ function ResetAllModal({ onClose, onConfirm }) {
   );
 }
 
+function downloadBackup(db) {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `catalyst-respaldo-${todayISO()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function RestoreBackupModal({ onClose, onConfirm }) {
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState('');
+  const [text, setText] = useState('');
+  const ok = text.trim().toUpperCase() === 'RESTAURAR';
+
+  const handleFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    setError('');
+    setParsed(null);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = JSON.parse(evt.target.result);
+        if (!data || !Array.isArray(data.invoices) || !Array.isArray(data.clients)) {
+          setError('Este archivo no parece un respaldo válido de Catalyst.');
+          return;
+        }
+        setParsed(data);
+      } catch (err) {
+        setError('No se pudo leer el archivo. ¿Seguro que es un respaldo exportado desde aquí?');
+      }
+    };
+    reader.readAsText(f);
+  };
+
+  return (
+    <Modal title="Restaurar desde un respaldo" onClose={onClose}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16, padding: 12, background: C.rustFaint, borderRadius: 8 }}>
+        <AlertTriangle size={18} color={C.rust} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div style={{ fontSize: 13, color: C.ink }}>
+          Esto reemplaza <strong>toda</strong> la información actual del sistema por la que traiga el archivo. Úsalo solo si de verdad necesitas volver a una copia anterior.
+        </div>
+      </div>
+      <div className="qn-field">
+        <label className="qn-label">Archivo de respaldo (.json)</label>
+        <input className="qn-input" type="file" accept=".json,application/json" onChange={handleFile} />
+      </div>
+      {error && <div style={{ fontSize: 12.5, color: C.rust, marginBottom: 10 }}>{error}</div>}
+      {parsed && (
+        <div style={{ fontSize: 12.5, color: C.inkSoft, marginBottom: 14 }}>
+          Se encontraron {parsed.invoices?.length || 0} ventas, {parsed.clients?.length || 0} clientes y {parsed.products?.length || 0} productos en este archivo.
+        </div>
+      )}
+      {parsed && (
+        <div className="qn-field">
+          <label className="qn-label">Escribe RESTAURAR para confirmar</label>
+          <input className="qn-input" value={text} onChange={(e) => setText(e.target.value)} placeholder="RESTAURAR" />
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+        <button className="qn-btn" onClick={onClose}>Cancelar</button>
+        <button className="qn-btn qn-btn-danger" disabled={!parsed || !ok} onClick={() => { onConfirm(parsed); onClose(); }}>
+          <Check size={14} /> Restaurar
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function Maestros({ db, setDb }) {
   const [tab, setTab] = useState('clientes');
   const [showReset, setShowReset] = useState(false);
+  const [showRestore, setShowRestore] = useState(false);
 
   const resetAllData = () => {
     setDb((prev) => ({
@@ -2637,7 +2711,22 @@ function Maestros({ db, setDb }) {
         />
       )}
 
-      <div className="qn-card qn-section" style={{ marginTop: 24, borderColor: C.rust }}>
+      <div className="qn-card qn-section" style={{ marginTop: 24 }}>
+        <div className="qn-section-title">Respaldo de tu información</div>
+        <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 14 }}>
+          Descarga una copia completa de todos tus datos (ventas, clientes, inventario, todo) para guardarla tú mismo — el plan gratuito de tu base de datos no hace respaldos automáticos. Se recomienda descargar uno nuevo cada semana, o antes de cualquier cambio importante.
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button className="qn-btn qn-btn-primary" onClick={() => downloadBackup(db)}>
+            <Download size={14} /> Descargar respaldo completo
+          </button>
+          <button className="qn-btn" onClick={() => setShowRestore(true)}>
+            <Upload size={14} /> Restaurar desde un respaldo
+          </button>
+        </div>
+      </div>
+
+      <div className="qn-card qn-section" style={{ marginTop: 18, borderColor: C.rust }}>
         <div className="qn-section-title" style={{ color: C.rust }}>Zona de peligro</div>
         <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 14 }}>
           Elimina permanentemente toda la información del sistema (ventas, cuentas por cobrar y por pagar, inventario, caja y bancos, clientes, productos y proveedores). Los datos de tu empresa se conservan.
@@ -2648,6 +2737,7 @@ function Maestros({ db, setDb }) {
       </div>
 
       {showReset && <ResetAllModal onClose={() => setShowReset(false)} onConfirm={resetAllData} />}
+      {showRestore && <RestoreBackupModal onClose={() => setShowRestore(false)} onConfirm={(data) => setDb(data)} />}
     </div>
   );
 }
