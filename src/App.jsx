@@ -9,7 +9,7 @@ import autoTable from 'jspdf-autotable';
 import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, ShoppingCart, ArrowDownCircle, ArrowUpCircle, Wallet,
-  Boxes, FileSpreadsheet, Scale, TrendingUp, Plus, X, Search, Trash2,
+  Boxes, Scale, TrendingUp, Plus, X, Search, Trash2,
   Download, Eye, Landmark, Check, Package, History, Upload, Pencil, Users, ChevronDown, ChevronUp, AlertTriangle, Printer,
 } from 'lucide-react';
 
@@ -816,11 +816,8 @@ function InvoicePreview({ db, invoice, onClose, onDeletePayment, onDeleteInvoice
         <ConfirmDelete onConfirm={onDeleteInvoice} label="Eliminar factura completa" />
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="qn-btn" onClick={onClose}>Cerrar</button>
-          <button className="qn-btn" onClick={() => downloadInvoicePDF(db, invoice)}>
+          <button className="qn-btn qn-btn-primary" onClick={() => downloadInvoicePDF(db, invoice)}>
             <Printer size={14} /> Descargar PDF
-          </button>
-          <button className="qn-btn qn-btn-primary" onClick={() => downloadInvoiceExcel(db, invoice)}>
-            <Download size={14} /> Descargar Excel
           </button>
         </div>
       </div>
@@ -1560,7 +1557,6 @@ function Ventas({ db, setDb }) {
                         <button className="qn-btn qn-btn-sm qn-btn-icon" title="Ver" onClick={() => setPreview(inv.id)}><Eye size={14} /></button>
                         <button className="qn-btn qn-btn-sm qn-btn-icon" title="Editar" onClick={() => setEditing(inv.id)}><Pencil size={14} /></button>
                         <button className="qn-btn qn-btn-sm qn-btn-icon" title="PDF" onClick={() => downloadInvoicePDF(db, inv)}><Printer size={14} /></button>
-                        <button className="qn-btn qn-btn-sm qn-btn-icon" title="Excel" onClick={() => downloadInvoiceExcel(db, inv)}><FileSpreadsheet size={14} /></button>
                         {bal > 0 && <button className="qn-btn qn-btn-sm" onClick={() => setPayFor(inv)}>Registrar pago</button>}
                         <ConfirmDelete onConfirm={() => deleteInvoice(inv.id)} label="Eliminar factura" />
                       </div>
