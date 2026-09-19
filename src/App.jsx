@@ -8,7 +8,7 @@ import { supabase } from './supabaseClient';
 import {
   LayoutDashboard, ShoppingCart, ArrowDownCircle, ArrowUpCircle, Wallet,
   Boxes, FileSpreadsheet, Scale, TrendingUp, Plus, X, Search, Trash2,
-  Download, Eye, Landmark, Check, Package, History, Upload, Pencil, Users, ChevronDown, ChevronUp, AlertTriangle, Printer,
+  Download, Eye, Landmark, Check, Package, History, Upload, Pencil, Users, ChevronDown, ChevronUp, AlertTriangle, Printer, UserPlus,
 } from 'lucide-react';
 
 const LOGO_SRC = '/logo.webp';
@@ -322,7 +322,8 @@ function DueDateField({ label, baseDate, value, onChange }) {
 }
 
 /* ============================== SIDEBAR ============================== */
-function Sidebar({ tab, setTab, company }) {
+function Sidebar({ tab, setTab, company, role }) {
+  const isOwner = role === 'owner';
   const items = [
     { group: 'General', links: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
     {
@@ -331,20 +332,28 @@ function Sidebar({ tab, setTab, company }) {
         { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
         { id: 'cxc', label: 'Cuentas por cobrar', icon: ArrowDownCircle },
         { id: 'cartera', label: 'Cartera de clientes', icon: Users },
-        { id: 'cxp', label: 'Cuentas por pagar', icon: ArrowUpCircle },
+        ...(isOwner ? [{ id: 'cxp', label: 'Cuentas por pagar', icon: ArrowUpCircle }] : []),
         { id: 'inventario', label: 'Inventario', icon: Package },
-        { id: 'caja', label: 'Caja y bancos', icon: Wallet },
+        ...(isOwner ? [{ id: 'caja', label: 'Caja y bancos', icon: Wallet }] : []),
       ],
     },
     {
       group: 'Finanzas',
       links: [
         { id: 'historicos', label: 'Histórico de ventas', icon: History },
-        { id: 'balance', label: 'Balance general', icon: Scale },
-        { id: 'pyg', label: 'Rentabilidad (P&G)', icon: TrendingUp },
+        ...(isOwner ? [
+          { id: 'balance', label: 'Balance general', icon: Scale },
+          { id: 'pyg', label: 'Rentabilidad (P&G)', icon: TrendingUp },
+        ] : []),
       ],
     },
-    { group: 'Configuración', links: [{ id: 'maestros', label: 'Clientes y productos', icon: Boxes }] },
+    {
+      group: 'Configuración',
+      links: [
+        { id: 'maestros', label: 'Clientes y productos', icon: Boxes },
+        ...(isOwner ? [{ id: 'equipo', label: 'Equipo', icon: UserPlus }] : []),
+      ],
+    },
   ];
   return (
     <div className="qn-sidebar">
@@ -2255,9 +2264,10 @@ function ResetAllModal({ onClose, onConfirm }) {
   );
 }
 
-function Maestros({ db, setDb }) {
+function Maestros({ db, setDb, role }) {
   const [tab, setTab] = useState('clientes');
   const [showReset, setShowReset] = useState(false);
+  const isOwner = role === 'owner';
 
   const resetAllData = () => {
     setDb((prev) => ({
@@ -2319,17 +2329,115 @@ function Maestros({ db, setDb }) {
         />
       )}
 
-      <div className="qn-card qn-section" style={{ marginTop: 24, borderColor: C.rust }}>
-        <div className="qn-section-title" style={{ color: C.rust }}>Zona de peligro</div>
-        <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 14 }}>
-          Elimina permanentemente toda la información del sistema (ventas, cuentas por cobrar y por pagar, inventario, caja y bancos, clientes, productos y proveedores). Los datos de tu empresa se conservan.
+      {isOwner && (
+        <div className="qn-card qn-section" style={{ marginTop: 24, borderColor: C.rust }}>
+          <div className="qn-section-title" style={{ color: C.rust }}>Zona de peligro</div>
+          <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 14 }}>
+            Elimina permanentemente toda la información del sistema (ventas, cuentas por cobrar y por pagar, inventario, caja y bancos, clientes, productos y proveedores). Los datos de tu empresa se conservan.
+          </div>
+          <button className="qn-btn qn-btn-danger" onClick={() => setShowReset(true)}>
+            <Trash2 size={14} /> Eliminar toda la información del sistema
+          </button>
         </div>
-        <button className="qn-btn qn-btn-danger" onClick={() => setShowReset(true)}>
-          <Trash2 size={14} /> Eliminar toda la información del sistema
-        </button>
-      </div>
+      )}
 
       {showReset && <ResetAllModal onClose={() => setShowReset(false)} onConfirm={resetAllData} />}
+    </div>
+  );
+}
+
+/* ============================== EQUIPO ============================== */
+function Equipo({ companyId }) {
+  const [members, setMembers] = useState(null);
+  const [loadErr, setLoadErr] = useState(null);
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState('vendedor');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('company_members').select('user_id, role, created_at').eq('company_id', companyId).order('created_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) { setLoadErr(error.message); return; }
+        setMembers(data || []);
+      });
+    return () => { cancelled = true; };
+  }, [companyId]);
+
+  const snippet = `insert into company_members (company_id, user_id, role)\nvalues ('${companyId}', (select id from auth.users where email = '${email.trim() || 'correo@empleado.com'}'), '${role}');`;
+
+  const copySnippet = () => {
+    navigator.clipboard.writeText(snippet).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div>
+      <div className="qn-page-head">
+        <div>
+          <div className="qn-page-title">Equipo</div>
+          <div className="qn-page-sub">Quién tiene acceso a este sistema y con qué rol</div>
+        </div>
+      </div>
+
+      <div className="qn-card qn-section">
+        <div className="qn-section-title">Miembros actuales</div>
+        {loadErr ? (
+          <div style={{ fontSize: 13, color: C.rust }}>No se pudo cargar: {loadErr}</div>
+        ) : members === null ? (
+          <div style={{ fontSize: 13, color: C.inkSoft }}>Cargando…</div>
+        ) : members.length === 0 ? (
+          <Empty title="Sin miembros" sub="Esto no debería pasar — recarga la página." />
+        ) : (
+          <table className="qn-table">
+            <thead><tr><th>Usuario (ID)</th><th>Rol</th><th>Desde</th></tr></thead>
+            <tbody>
+              {members.map((m) => (
+                <tr key={m.user_id}>
+                  <td className="qn-mono" style={{ fontSize: 11.5 }}>{m.user_id}</td>
+                  <td>{m.role === 'owner' ? 'Dueño' : 'Vendedor'}</td>
+                  <td>{fmtDate(m.created_at.slice(0, 10))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div style={{ fontSize: 11.5, color: C.inkSoft, marginTop: 10 }}>
+          Por ahora se muestra el identificador interno del usuario, no su correo — Supabase no permite consultar los correos de otros usuarios directamente desde la app por seguridad.
+        </div>
+      </div>
+
+      <div className="qn-card qn-section">
+        <div className="qn-section-title">Agregar un empleado</div>
+        <ol style={{ fontSize: 13, color: C.inkSoft, paddingLeft: 18, marginBottom: 16, lineHeight: 1.8 }}>
+          <li>En Supabase, ve a <strong>Authentication → Users → Add user</strong> y crea el correo y contraseña del empleado (igual que hiciste con el tuyo).</li>
+          <li>Escribe ese mismo correo abajo y elige su rol.</li>
+          <li>Copia el código y pégalo en Supabase, en <strong>SQL Editor</strong>, y dale Run.</li>
+        </ol>
+        <div className="qn-row2">
+          <div className="qn-field">
+            <label className="qn-label">Correo del empleado</label>
+            <input className="qn-input" type="email" placeholder="correo@empleado.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="qn-field">
+            <label className="qn-label">Rol</label>
+            <select className="qn-select" value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="vendedor">Vendedor</option>
+              <option value="owner">Dueño (acceso total)</option>
+            </select>
+          </div>
+        </div>
+        <div className="qn-field">
+          <label className="qn-label">Código para pegar en Supabase</label>
+          <pre className="qn-mono" style={{ background: C.bg, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{snippet}</pre>
+        </div>
+        <button className="qn-btn qn-btn-primary" onClick={copySnippet}>
+          <Check size={14} /> {copied ? 'Copiado' : 'Copiar código'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2793,7 +2901,7 @@ function LoginScreen() {
   );
 }
 
-function App({ userId }) {
+function App({ companyId, role }) {
   const [db, setDb] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -2802,11 +2910,12 @@ function App({ userId }) {
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
   const versionRef = useRef(null); // último updated_at que sabemos que está en la base de datos
+  const isOwner = role === 'owner';
 
   useEffect(() => {
     let cancelled = false;
     async function load(attempt) {
-      const { data, error } = await supabase.from('app_data').select('data, updated_at').eq('user_id', userId).maybeSingle();
+      const { data, error } = await supabase.from('company_data').select('data, updated_at').eq('company_id', companyId).maybeSingle();
       if (cancelled) return;
       if (error) {
         if (attempt < 2) { setTimeout(() => load(attempt + 1), 600); return; }
@@ -2821,8 +2930,8 @@ function App({ userId }) {
       const nowIso = new Date().toISOString();
       const seed = seedData();
       const { data: inserted, error: upsertError } = await supabase
-        .from('app_data')
-        .upsert({ user_id: userId, data: seed, updated_at: nowIso })
+        .from('company_data')
+        .upsert({ company_id: companyId, data: seed, updated_at: nowIso })
         .select('updated_at')
         .single();
       if (cancelled) return;
@@ -2837,7 +2946,7 @@ function App({ userId }) {
     setConflict(false);
     load(0);
     return () => { cancelled = true; };
-  }, [userId, reloadKey]);
+  }, [companyId, reloadKey]);
 
   useEffect(() => {
     if (!db || conflict) return;
@@ -2846,12 +2955,12 @@ function App({ userId }) {
     saveTimer.current = setTimeout(async () => {
       const nowIso = new Date().toISOString();
       // Solo guarda si nadie más ha guardado desde la última vez que leímos — si alguien más
-      // guardó primero (otra pestaña/dispositivo), esto no actualiza ninguna fila y avisamos
-      // en vez de sobrescribir en silencio.
+      // guardó primero (otra pestaña/dispositivo/compañero), esto no actualiza ninguna fila
+      // y avisamos en vez de sobrescribir en silencio.
       const { data, error } = await supabase
-        .from('app_data')
+        .from('company_data')
         .update({ data: db, updated_at: nowIso })
-        .eq('user_id', userId)
+        .eq('company_id', companyId)
         .eq('updated_at', versionRef.current)
         .select('updated_at');
       if (error) { console.error('Error guardando en Supabase:', error); return; }
@@ -2861,7 +2970,7 @@ function App({ userId }) {
       versionRef.current = data[0].updated_at;
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [db, userId, conflict]);
+  }, [db, companyId, conflict]);
 
   if (loadError) {
     return (
@@ -2886,30 +2995,73 @@ function App({ userId }) {
           <div className="qn-card qn-section" style={{ maxWidth: 420, textAlign: 'center' }}>
             <div style={{ fontWeight: 700, marginBottom: 8, fontFamily: "'Space Grotesk', sans-serif" }}>Hay cambios más recientes</div>
             <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 18 }}>
-              Se guardó información más nueva desde otra pestaña o dispositivo. Para no perder esos cambios, tus últimas ediciones aquí no se guardaron. Recarga la página para ver la versión más reciente y seguir trabajando.
+              Se guardó información más nueva desde otra pestaña, dispositivo o compañero de equipo. Para no perder esos cambios, tus últimas ediciones aquí no se guardaron. Recarga la página para ver la versión más reciente y seguir trabajando.
             </div>
             <button className="qn-btn qn-btn-primary" onClick={() => window.location.reload()}>Recargar página</button>
           </div>
         </div>
       )}
       <div className="qn-shell">
-        <Sidebar tab={tab} setTab={setTab} company={db.company} />
+        <Sidebar tab={tab} setTab={setTab} company={db.company} role={role} />
         <div className="qn-main">
           {tab === 'dashboard' && <Dashboard db={db} />}
           {tab === 'ventas' && <Ventas db={db} setDb={setDb} />}
           {tab === 'cxc' && <CuentasCobrar db={db} setDb={setDb} />}
           {tab === 'cartera' && <Cartera db={db} />}
-          {tab === 'cxp' && <CuentasPagar db={db} setDb={setDb} />}
+          {tab === 'cxp' && isOwner && <CuentasPagar db={db} setDb={setDb} />}
           {tab === 'inventario' && <Inventario db={db} setDb={setDb} />}
-          {tab === 'caja' && <CajaBancos db={db} setDb={setDb} />}
+          {tab === 'caja' && isOwner && <CajaBancos db={db} setDb={setDb} />}
           {tab === 'historicos' && <Historicos db={db} />}
-          {tab === 'balance' && <BalanceGeneral db={db} />}
-          {tab === 'pyg' && <EstadoResultados db={db} />}
-          {tab === 'maestros' && <Maestros db={db} setDb={setDb} />}
+          {tab === 'balance' && isOwner && <BalanceGeneral db={db} />}
+          {tab === 'pyg' && isOwner && <EstadoResultados db={db} />}
+          {tab === 'maestros' && <Maestros db={db} setDb={setDb} role={role} />}
+          {tab === 'equipo' && isOwner && <Equipo companyId={companyId} />}
         </div>
       </div>
     </div>
   );
+}
+
+function CompanyGate({ userId }) {
+  const [membership, setMembership] = useState(undefined); // undefined = cargando, null = sin empresa
+  const [membershipError, setMembershipError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('company_members').select('company_id, role').eq('user_id', userId).maybeSingle().then(({ data, error }) => {
+      if (cancelled) return;
+      if (error) { setMembershipError(error.message); return; }
+      setMembership(data || null);
+    });
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  if (membershipError) {
+    return (
+      <div className="qn-root" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <GlobalStyle />
+        <div style={{ textAlign: 'center', maxWidth: 380, padding: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8, fontFamily: "'Space Grotesk', sans-serif" }}>No se pudo verificar tu acceso</div>
+          <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 18 }}>{membershipError}</div>
+          <button className="qn-btn qn-btn-primary" onClick={() => window.location.reload()}>Reintentar</button>
+        </div>
+      </div>
+    );
+  }
+  if (membership === undefined) return <LoadingScreen text="Verificando tu acceso…" />;
+  if (!membership) {
+    return (
+      <div className="qn-root" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <GlobalStyle />
+        <div style={{ textAlign: 'center', maxWidth: 380, padding: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8, fontFamily: "'Space Grotesk', sans-serif" }}>Tu cuenta aún no está en ninguna empresa</div>
+          <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 18 }}>Pídele al dueño del sistema que te agregue desde la sección «Equipo».</div>
+          <button className="qn-btn" onClick={() => supabase.auth.signOut()}>Cerrar sesión</button>
+        </div>
+      </div>
+    );
+  }
+  return <App companyId={membership.company_id} role={membership.role} />;
 }
 
 export default function Root() {
@@ -2923,5 +3075,6 @@ export default function Root() {
 
   if (session === undefined) return <LoadingScreen text="Verificando sesión…" />;
   if (!session) return <LoginScreen />;
-  return <App userId={session.user.id} />;
+  return <CompanyGate userId={session.user.id} />;
 }
+
