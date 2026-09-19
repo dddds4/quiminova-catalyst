@@ -2803,14 +2803,18 @@ function App({ userId }) {
       }
       const nowIso = new Date().toISOString();
       const seed = seedData();
-      const { error: upsertError } = await supabase.from('app_data').upsert({ user_id: userId, data: seed, updated_at: nowIso });
+      const { data: inserted, error: upsertError } = await supabase
+        .from('app_data')
+        .upsert({ user_id: userId, data: seed, updated_at: nowIso })
+        .select('updated_at')
+        .single();
       if (cancelled) return;
       if (upsertError) {
         setLoadError('No se pudo inicializar tu información: ' + upsertError.message);
         return;
       }
       setDb(seed);
-      versionRef.current = nowIso;
+      versionRef.current = inserted ? inserted.updated_at : nowIso;
     }
     setLoadError(null);
     setConflict(false);
@@ -2835,7 +2839,9 @@ function App({ userId }) {
         .select('updated_at');
       if (error) { console.error('Error guardando en Supabase:', error); return; }
       if (!data || data.length === 0) { setConflict(true); return; }
-      versionRef.current = nowIso;
+      // Usamos el valor que la base de datos confirmó, no el que generamos localmente,
+      // porque Postgres puede reescribir el formato exacto del timestamp.
+      versionRef.current = data[0].updated_at;
     }, 500);
     return () => clearTimeout(saveTimer.current);
   }, [db, userId, conflict]);
