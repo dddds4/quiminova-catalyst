@@ -49,7 +49,6 @@ Se abrirá en `http://localhost:5173`.
 
 ## Notas importantes
 
-- **Multiusuario (equipos)**: si vas a agregar empleados, primero debes correr la migración `supabase-schema-multiuser.sql` en Supabase (SQL Editor > New query > Run). Es segura y aditiva: hace una copia de respaldo de tu información actual antes de tocar nada, y no borra ni modifica tu tabla original. Después de correrla, entra a la app → menú **Equipo** (solo visible para el dueño) para agregar empleados.
 - **Solo tú puedes entrar**: no hay pantalla de registro. Si en el futuro alguien más de tu equipo necesita entrar, créale un usuario nuevo desde Supabase (Authentication → Users → Add user) — aunque ese usuario vería una base de datos vacía separada de la tuya, porque cada usuario tiene su propio set de datos. Dime si en algún momento quieres que varias personas compartan la misma información y te ayudo a ajustarlo.
 - **Respaldo**: Supabase hace respaldos automáticos de tu base de datos en su plan gratuito, pero solo por un tiempo limitado. Si tu negocio crece, vale la pena revisar los planes pagos de Supabase (son baratos) para respaldos más largos.
 - **Costo**: mientras el uso sea el de un solo negocio, tanto Supabase como Vercel se mantienen en su capa gratuita.
