@@ -160,86 +160,140 @@ function GlobalStyle() {
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
-      .qn-root { font-family: 'Inter', sans-serif; color: ${C.ink}; background: ${C.bg}; }
+      :root {
+        --qn-shadow-sm: 0 1px 2px rgba(16,42,67,0.05), 0 1px 3px rgba(16,42,67,0.06);
+        --qn-shadow-md: 0 4px 12px rgba(16,42,67,0.08), 0 1px 3px rgba(16,42,67,0.06);
+        --qn-shadow-lg: 0 12px 32px rgba(16,42,67,0.14), 0 2px 8px rgba(16,42,67,0.08);
+        --qn-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+      }
+
+      .qn-root { font-family: 'Inter', sans-serif; color: ${C.ink}; background: ${C.bg}; -webkit-font-smoothing: antialiased; }
       .qn-root * { box-sizing: border-box; }
+      .qn-root ::selection { background: ${C.tealBright}; color: #fff; }
       .qn-display { font-family: 'Space Grotesk', sans-serif; }
-      .qn-mono { font-family: 'IBM Plex Mono', monospace; }
+      .qn-mono { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
 
       .qn-shell { display: flex; min-height: 100vh; }
-      .qn-sidebar { width: 232px; flex-shrink: 0; background: ${C.teal}; color: #EAF3F1; display: flex; flex-direction: column; padding: 22px 14px; }
-      .qn-brand { display: flex; align-items: center; gap: 10px; padding: 0 8px 20px; border-bottom: 1px solid rgba(234,243,241,0.15); margin-bottom: 16px; }
-      .qn-brand img { width: 34px; height: 34px; object-fit: contain; filter: brightness(0) invert(1); }
-      .qn-brand-text { line-height: 1.1; }
-      .qn-brand-text .name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; letter-spacing: 0.3px; }
-      .qn-brand-text .sub { font-size: 10.5px; opacity: 0.65; letter-spacing: 0.4px; }
-      .qn-nav { display: flex; flex-direction: column; gap: 2px; }
-      .qn-nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 7px; font-size: 13.5px; font-weight: 500; color: rgba(234,243,241,0.75); cursor: pointer; border: none; background: transparent; text-align: left; width: 100%; }
-      .qn-nav-item:hover { background: rgba(234,243,241,0.08); color: #EAF3F1; }
-      .qn-nav-item.active { background: rgba(234,243,241,0.14); color: #fff; }
+      .qn-right-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+      .qn-sidebar {
+        width: 240px; flex-shrink: 0; color: #EAF3F1; display: flex; flex-direction: column; padding: 20px 14px;
+        background: linear-gradient(175deg, ${C.teal} 0%, #0B3E39 100%);
+        box-shadow: 2px 0 16px rgba(10,30,28,0.18);
+        position: relative; z-index: 5;
+      }
+      .qn-brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px; border-bottom: 1px solid rgba(234,243,241,0.14); margin-bottom: 18px; }
+      .qn-brand img { width: 32px; height: 32px; object-fit: contain; filter: brightness(0) invert(1); }
+      .qn-brand-text { line-height: 1.15; }
+      .qn-brand-text .name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15.5px; letter-spacing: 0.2px; }
+      .qn-brand-text .sub { font-size: 10px; opacity: 0.6; letter-spacing: 0.6px; }
+      .qn-nav { display: flex; flex-direction: column; gap: 1px; }
+      .qn-nav-item {
+        display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 500;
+        color: rgba(234,243,241,0.72); cursor: pointer; border: none; background: transparent; text-align: left; width: 100%;
+        transition: background-color 150ms var(--qn-ease), color 150ms var(--qn-ease), transform 150ms var(--qn-ease);
+        position: relative;
+      }
+      .qn-nav-item:hover { background: rgba(234,243,241,0.09); color: #fff; }
+      .qn-nav-item:active { transform: scale(0.98); }
+      .qn-nav-item.active { background: rgba(255,255,255,0.13); color: #fff; font-weight: 600; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06); }
+      .qn-nav-item.active::before { content: ''; position: absolute; left: -14px; top: 50%; transform: translateY(-50%); width: 3px; height: 18px; border-radius: 3px; background: ${C.tealBright}; box-shadow: 0 0 8px ${C.tealBright}; }
       .qn-nav-item svg { flex-shrink: 0; }
-      .qn-nav-group-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.45; padding: 14px 10px 4px; }
+      .qn-nav-group-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; opacity: 0.4; padding: 16px 12px 6px; font-weight: 600; }
 
-      .qn-main { flex: 1; padding: 30px 38px 60px; max-width: 1180px; }
-      .qn-page-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 22px; flex-wrap: wrap; gap: 10px; }
-      .qn-page-title { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 600; }
-      .qn-page-sub { font-size: 13px; color: ${C.inkSoft}; margin-top: 2px; }
+      .qn-topbar {
+        display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+        padding: 12px 38px; border-bottom: 1px solid ${C.line}; background: rgba(244,246,245,0.85); backdrop-filter: blur(6px);
+        position: sticky; top: 0; z-index: 4;
+      }
+      .qn-topbar-date { font-size: 12.5px; color: ${C.inkSoft}; text-transform: capitalize; }
+      .qn-topbar-search {
+        display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: ${C.inkSoft}; background: ${C.surface};
+        border: 1px solid ${C.line}; border-radius: 8px; padding: 7px 10px 7px 9px; cursor: pointer; transition: all 150ms var(--qn-ease);
+      }
+      .qn-topbar-search:hover { border-color: ${C.tealBright}; color: ${C.ink}; box-shadow: var(--qn-shadow-sm); }
+      .qn-topbar-search kbd { font-family: 'IBM Plex Mono', monospace; font-size: 10px; background: ${C.bg}; border: 1px solid ${C.line}; border-radius: 4px; padding: 1px 5px; color: ${C.inkSoft}; }
 
-      .qn-btn { display: inline-flex; align-items: center; gap: 7px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; padding: 9px 15px; border-radius: 7px; border: 1px solid ${C.line}; background: ${C.surface}; color: ${C.ink}; cursor: pointer; white-space: nowrap; }
-      .qn-btn:hover { border-color: ${C.tealBright}; }
-      .qn-btn-primary { background: ${C.teal}; color: #fff; border-color: ${C.teal}; }
-      .qn-btn-primary:hover { background: ${C.tealBright}; border-color: ${C.tealBright}; }
+      .qn-main { flex: 1; padding: 30px 38px 60px; max-width: 1180px; animation: qnFadeIn 220ms var(--qn-ease); }
+      @keyframes qnFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+      .qn-page-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 10px; }
+      .qn-page-title { font-family: 'Space Grotesk', sans-serif; font-size: 23px; font-weight: 600; letter-spacing: -0.2px; }
+      .qn-page-sub { font-size: 13px; color: ${C.inkSoft}; margin-top: 3px; }
+
+      .qn-btn {
+        display: inline-flex; align-items: center; gap: 7px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+        padding: 9px 15px; border-radius: 8px; border: 1px solid ${C.line}; background: ${C.surface}; color: ${C.ink}; cursor: pointer; white-space: nowrap;
+        transition: border-color 150ms var(--qn-ease), background-color 150ms var(--qn-ease), box-shadow 150ms var(--qn-ease), transform 100ms var(--qn-ease);
+      }
+      .qn-btn:hover { border-color: ${C.tealBright}; box-shadow: var(--qn-shadow-sm); }
+      .qn-btn:active { transform: translateY(1px); }
+      .qn-btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
+      .qn-btn-primary { background: linear-gradient(155deg, ${C.tealBright}, ${C.teal}); color: #fff; border-color: ${C.teal}; }
+      .qn-btn-primary:hover { filter: brightness(1.06); box-shadow: var(--qn-shadow-md); border-color: ${C.tealBright}; }
       .qn-btn-danger { color: ${C.rust}; }
+      .qn-btn-danger:hover { border-color: ${C.rust}; background: ${C.rustFaint}; }
       .qn-btn-sm { padding: 6px 10px; font-size: 12.5px; }
       .qn-btn-icon { padding: 7px; }
 
-      .qn-card { background: ${C.surface}; border: 1px solid ${C.line}; border-radius: 10px; }
-      .qn-stat { padding: 16px 18px; }
-      .qn-stat .label { font-size: 12px; color: ${C.inkSoft}; margin-bottom: 8px; }
-      .qn-stat .value { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 600; }
+      .qn-card { background: ${C.surface}; border: 1px solid ${C.line}; border-radius: 12px; box-shadow: var(--qn-shadow-sm); transition: box-shadow 180ms var(--qn-ease); }
+      .qn-stat { padding: 17px 19px; position: relative; overflow: hidden; }
+      .qn-stat .label { font-size: 12px; color: ${C.inkSoft}; margin-bottom: 9px; display: flex; align-items: center; gap: 7px; font-weight: 500; }
+      .qn-stat .label .qn-stat-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 7px; background: ${C.tealFaint}; color: ${C.teal}; flex-shrink: 0; }
+      .qn-stat .value { font-family: 'Space Grotesk', sans-serif; font-size: 25px; font-weight: 600; letter-spacing: -0.3px; font-variant-numeric: tabular-nums; }
       .qn-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
       @media (max-width: 900px) { .qn-stats-row { grid-template-columns: repeat(2, 1fr); } }
 
-      .qn-section { padding: 18px 20px; margin-bottom: 18px; }
-      .qn-section-title { font-family: 'Space Grotesk', sans-serif; font-size: 14.5px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+      .qn-section { padding: 19px 21px; margin-bottom: 18px; }
+      .qn-section-title { font-family: 'Space Grotesk', sans-serif; font-size: 14.5px; font-weight: 600; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; letter-spacing: 0.1px; }
 
       .qn-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-      .qn-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: ${C.inkSoft}; font-weight: 600; padding: 0 10px 8px; border-bottom: 1px solid ${C.line}; }
-      .qn-table td { padding: 11px 10px; border-bottom: 1px solid ${C.line}; vertical-align: middle; }
+      .qn-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.7px; color: ${C.inkSoft}; font-weight: 700; padding: 0 10px 10px; border-bottom: 1px solid ${C.line}; }
+      .qn-table td { padding: 12px 10px; border-bottom: 1px solid ${C.line}; vertical-align: middle; }
       .qn-table tr:last-child td { border-bottom: none; }
+      .qn-table tr { transition: background-color 120ms var(--qn-ease); }
       .qn-table tr:hover td { background: ${C.bg}; }
 
-      .qn-badge { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; }
+      .qn-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; letter-spacing: 0.2px; }
+      .qn-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
       .qn-badge.pagada { background: ${C.tealFaint}; color: ${C.teal}; }
       .qn-badge.parcial { background: ${C.amberFaint}; color: ${C.amber}; }
       .qn-badge.vencida { background: ${C.rustFaint}; color: ${C.rust}; }
       .qn-badge.pendiente { background: ${C.bg}; color: ${C.inkSoft}; border: 1px solid ${C.line}; }
 
-      .qn-input, .qn-select { width: 100%; font-family: 'Inter', sans-serif; font-size: 13.5px; padding: 8px 10px; border-radius: 6px; border: 1px solid ${C.line}; background: #fff; color: ${C.ink}; }
-      .qn-input:focus, .qn-select:focus { outline: 2px solid ${C.tealBright}; outline-offset: 0; border-color: ${C.tealBright}; }
-      .qn-label { font-size: 11.5px; font-weight: 600; color: ${C.inkSoft}; margin-bottom: 5px; display: block; }
+      .qn-input, .qn-select {
+        width: 100%; font-family: 'Inter', sans-serif; font-size: 13.5px; padding: 8px 10px; border-radius: 7px; border: 1px solid ${C.line};
+        background: #fff; color: ${C.ink}; transition: border-color 150ms var(--qn-ease), box-shadow 150ms var(--qn-ease);
+      }
+      .qn-input:hover, .qn-select:hover { border-color: #C7CFCB; }
+      .qn-input:focus, .qn-select:focus { outline: none; border-color: ${C.tealBright}; box-shadow: 0 0 0 3px ${C.tealFaint}; }
+      .qn-label { font-size: 11.5px; font-weight: 600; color: ${C.inkSoft}; margin-bottom: 5px; display: block; letter-spacing: 0.1px; }
       .qn-field { margin-bottom: 13px; }
       .qn-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       .qn-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 
-      .qn-modal-overlay { position: fixed; inset: 0; background: rgba(16,42,67,0.45); display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow-y: auto; z-index: 50; }
-      .qn-modal { background: #fff; border-radius: 12px; width: 100%; max-width: 560px; padding: 24px 26px 26px; }
+      .qn-modal-overlay { position: fixed; inset: 0; background: rgba(11,28,26,0.5); backdrop-filter: blur(2px); display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; overflow-y: auto; z-index: 50; animation: qnFadeIn 160ms var(--qn-ease); }
+      .qn-modal { background: #fff; border-radius: 14px; width: 100%; max-width: 560px; padding: 24px 26px 26px; box-shadow: var(--qn-shadow-lg); animation: qnModalIn 200ms var(--qn-ease); }
+      @keyframes qnModalIn { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
       .qn-modal.wide { max-width: 720px; }
       .qn-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
       .qn-modal-title { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 600; }
-      .qn-close { background: none; border: none; cursor: pointer; color: ${C.inkSoft}; padding: 4px; }
+      .qn-close { background: none; border: none; cursor: pointer; color: ${C.inkSoft}; padding: 4px; border-radius: 6px; transition: background-color 120ms var(--qn-ease), color 120ms var(--qn-ease); }
+      .qn-close:hover { background: ${C.bg}; color: ${C.ink}; }
 
-      .qn-empty { text-align: center; padding: 46px 20px; color: ${C.inkSoft}; }
+      .qn-empty { text-align: center; padding: 48px 20px; color: ${C.inkSoft}; }
       .qn-empty .t { font-family: 'Space Grotesk', sans-serif; font-size: 15px; color: ${C.ink}; margin-bottom: 5px; font-weight: 600; }
       .qn-empty .s { font-size: 13px; max-width: 340px; margin: 0 auto; }
 
       .qn-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid ${C.line}; }
-      .qn-tab { padding: 9px 4px; margin-right: 22px; font-size: 13.5px; font-weight: 600; color: ${C.inkSoft}; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; }
+      .qn-tab { padding: 9px 4px; margin-right: 22px; font-size: 13.5px; font-weight: 600; color: ${C.inkSoft}; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; transition: color 150ms var(--qn-ease), border-color 150ms var(--qn-ease); }
+      .qn-tab:hover { color: ${C.ink}; }
       .qn-tab.active { color: ${C.teal}; border-bottom-color: ${C.teal}; }
 
       .qn-item-row { display: grid; grid-template-columns: 2.4fr 1fr 0.9fr 0.9fr 1.1fr 30px; gap: 8px; align-items: end; margin-bottom: 10px; }
-      .qn-linklike { background: none; border: none; color: ${C.tealBright}; font-weight: 600; font-size: 12.5px; cursor: pointer; padding: 2px 0; display: inline-flex; align-items: center; gap: 5px; }
+      .qn-linklike { background: none; border: none; color: ${C.tealBright}; font-weight: 600; font-size: 12.5px; cursor: pointer; padding: 2px 0; display: inline-flex; align-items: center; gap: 5px; transition: color 120ms var(--qn-ease); }
+      .qn-linklike:hover { color: ${C.teal}; text-decoration: underline; }
 
-      .qn-invoice-sheet { background: #fff; border: 1px solid ${C.line}; border-radius: 10px; padding: 30px 34px; }
+      .qn-invoice-sheet { background: #fff; border: 1px solid ${C.line}; border-radius: 12px; padding: 30px 34px; box-shadow: var(--qn-shadow-sm); }
       .qn-invoice-sheet .top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; }
       .qn-invoice-sheet .co-name { font-family: 'Space Grotesk', sans-serif; font-size: 19px; font-weight: 700; }
       .qn-invoice-sheet .co-meta { font-size: 12px; color: ${C.inkSoft}; line-height: 1.7; margin-top: 4px; }
@@ -248,6 +302,21 @@ function GlobalStyle() {
       .qn-invoice-sheet .meta-r .v { font-size: 13px; font-weight: 600; margin-top: 2px; }
       .qn-invoice-sheet .meta-r .v.big { font-size: 16px; }
       .qn-invoice-sheet .logo-mark { width: 44px; height: 44px; object-fit: contain; margin-bottom: 8px; }
+
+      .qn-skeleton { background: linear-gradient(100deg, ${C.line} 25%, #EEF1F0 45%, ${C.line} 65%); background-size: 200% 100%; animation: qnShimmer 1.4s ease-in-out infinite; border-radius: 8px; }
+      @keyframes qnShimmer { 0% { background-position: 150% 0; } 100% { background-position: -50% 0; } }
+
+      .qn-cmdk-overlay { position: fixed; inset: 0; background: rgba(11,28,26,0.5); backdrop-filter: blur(2px); display: flex; align-items: flex-start; justify-content: center; padding: 12vh 20px 20px; z-index: 80; animation: qnFadeIn 140ms var(--qn-ease); }
+      .qn-cmdk { width: 100%; max-width: 560px; background: #fff; border-radius: 14px; box-shadow: var(--qn-shadow-lg); overflow: hidden; animation: qnModalIn 160ms var(--qn-ease); }
+      .qn-cmdk-input-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid ${C.line}; }
+      .qn-cmdk-input-row input { flex: 1; border: none; outline: none; font-size: 15px; font-family: 'Inter', sans-serif; color: ${C.ink}; background: transparent; }
+      .qn-cmdk-results { max-height: 340px; overflow-y: auto; padding: 8px; }
+      .qn-cmdk-group { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.8px; color: ${C.inkSoft}; font-weight: 700; padding: 10px 10px 4px; }
+      .qn-cmdk-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 13.5px; transition: background-color 100ms var(--qn-ease); }
+      .qn-cmdk-item:hover, .qn-cmdk-item.active { background: ${C.tealFaint}; }
+      .qn-cmdk-item .qn-cmdk-icon { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 7px; background: ${C.bg}; color: ${C.teal}; flex-shrink: 0; }
+      .qn-cmdk-item .qn-cmdk-meta { margin-left: auto; font-size: 11px; color: ${C.inkSoft}; }
+      .qn-cmdk-empty { padding: 30px 16px; text-align: center; font-size: 13px; color: ${C.inkSoft}; }
 
       @media print {
         body * { visibility: hidden; }
@@ -322,6 +391,133 @@ function DueDateField({ label, baseDate, value, onChange }) {
 }
 
 /* ============================== SIDEBAR ============================== */
+/* ============================== TOP BAR ============================== */
+function TopBar({ onOpenSearch }) {
+  const dateLabel = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return (
+    <div className="qn-topbar">
+      <div className="qn-topbar-date">{dateLabel}</div>
+      <button className="qn-topbar-search" onClick={onOpenSearch}>
+        <Search size={13} /> Buscar en todo el sistema <kbd>⌘K</kbd>
+      </button>
+    </div>
+  );
+}
+
+/* ============================== BÚSQUEDA GLOBAL (⌘K) ============================== */
+function CommandPalette({ db, onClose, onNavigate }) {
+  const [q, setQ] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current && inputRef.current.focus(), 20);
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => { clearTimeout(t); window.removeEventListener('keydown', onKey); };
+  }, [onClose]);
+
+  const query = q.trim().toLowerCase();
+  const allPages = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'ventas', label: 'Ventas', icon: ShoppingCart },
+    { id: 'cxc', label: 'Cuentas por cobrar', icon: ArrowDownCircle },
+    { id: 'cartera', label: 'Cartera de clientes', icon: Users },
+    { id: 'cxp', label: 'Cuentas por pagar', icon: ArrowUpCircle },
+    { id: 'inventario', label: 'Inventario', icon: Package },
+    { id: 'caja', label: 'Caja y bancos', icon: Wallet },
+    { id: 'historicos', label: 'Histórico de ventas', icon: History },
+    { id: 'balance', label: 'Balance general', icon: Scale },
+    { id: 'pyg', label: 'Rentabilidad (P&G)', icon: TrendingUp },
+    { id: 'maestros', label: 'Clientes y productos', icon: Boxes },
+  ];
+  const pages = query ? allPages.filter((p) => p.label.toLowerCase().includes(query)) : allPages.slice(0, 5);
+  const clients = query ? db.clients.filter((c) => c.name.toLowerCase().includes(query)).slice(0, 5) : [];
+  const products = query ? db.products.filter((p) => p.name.toLowerCase().includes(query)).slice(0, 5) : [];
+  const suppliers = query ? db.suppliers.filter((s) => s.name.toLowerCase().includes(query)).slice(0, 5) : [];
+  const invoices = query ? db.invoices.filter((i) => {
+    const client = db.clients.find((c) => c.id === i.clientId);
+    return i.number.toLowerCase().includes(query) || (client && client.name.toLowerCase().includes(query));
+  }).slice(0, 5) : [];
+  const total = pages.length + clients.length + products.length + suppliers.length + invoices.length;
+  const go = (tabId) => { onNavigate(tabId); onClose(); };
+
+  return (
+    <div className="qn-cmdk-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="qn-cmdk">
+        <div className="qn-cmdk-input-row">
+          <Search size={16} color={C.inkSoft} />
+          <input ref={inputRef} placeholder="Buscar páginas, clientes, facturas, productos, proveedores…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <kbd style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: C.inkSoft, border: `1px solid ${C.line}`, borderRadius: 4, padding: '1px 5px' }}>Esc</kbd>
+        </div>
+        <div className="qn-cmdk-results">
+          {total === 0 ? (
+            <div className="qn-cmdk-empty">Sin resultados para "{q}"</div>
+          ) : (
+            <>
+              {pages.length > 0 && (
+                <div>
+                  <div className="qn-cmdk-group">Páginas</div>
+                  {pages.map((p) => (
+                    <div key={p.id} className="qn-cmdk-item" onClick={() => go(p.id)}>
+                      <span className="qn-cmdk-icon"><p.icon size={13} /></span>{p.label}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {clients.length > 0 && (
+                <div>
+                  <div className="qn-cmdk-group">Clientes</div>
+                  {clients.map((c) => (
+                    <div key={c.id} className="qn-cmdk-item" onClick={() => go('cartera')}>
+                      <span className="qn-cmdk-icon"><Users size={13} /></span>{c.name}
+                      <span className="qn-cmdk-meta">Ver cartera</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {invoices.length > 0 && (
+                <div>
+                  <div className="qn-cmdk-group">Facturas</div>
+                  {invoices.map((inv) => {
+                    const client = db.clients.find((c) => c.id === inv.clientId);
+                    return (
+                      <div key={inv.id} className="qn-cmdk-item" onClick={() => go('ventas')}>
+                        <span className="qn-cmdk-icon"><ShoppingCart size={13} /></span>
+                        <span className="qn-mono">{inv.number}</span>&nbsp;— {client ? client.name : '—'}
+                        <span className="qn-cmdk-meta">{fmtMoney(inv.total)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {products.length > 0 && (
+                <div>
+                  <div className="qn-cmdk-group">Productos</div>
+                  {products.map((p) => (
+                    <div key={p.id} className="qn-cmdk-item" onClick={() => go('inventario')}>
+                      <span className="qn-cmdk-icon"><Package size={13} /></span>{p.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {suppliers.length > 0 && (
+                <div>
+                  <div className="qn-cmdk-group">Proveedores</div>
+                  {suppliers.map((s) => (
+                    <div key={s.id} className="qn-cmdk-item" onClick={() => go('cxp')}>
+                      <span className="qn-cmdk-icon"><ArrowUpCircle size={13} /></span>{s.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Sidebar({ tab, setTab, company }) {
   const items = [
     { group: 'General', links: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
@@ -2630,34 +2826,34 @@ function Dashboard({ db }) {
 
       <div className="qn-stats-row">
         <div className="qn-card qn-stat">
-          <div className="label">Ventas del mes</div>
+          <div className="label"><span className="qn-stat-icon"><TrendingUp size={12} /></span>Ventas del mes</div>
           <div className="value" style={{ color: C.teal }}>{fmtMoney(ventasMes)}</div>
         </div>
         <div className="qn-card qn-stat">
-          <div className="label">Cobrado en el mes</div>
+          <div className="label"><span className="qn-stat-icon"><ArrowDownCircle size={12} /></span>Cobrado en el mes</div>
           <div className="value">{fmtMoney(cobradoMes)}</div>
         </div>
         <div className="qn-card qn-stat">
-          <div className="label">Por cobrar (total)</div>
+          <div className="label"><span className="qn-stat-icon" style={{ background: C.rustFaint, color: C.rust }}><Users size={12} /></span>Por cobrar (total)</div>
           <div className="value" style={{ color: C.rust }}>{fmtMoney(totalAR(db))}</div>
         </div>
         <div className="qn-card qn-stat">
-          <div className="label">Saldo en caja y bancos</div>
+          <div className="label"><span className="qn-stat-icon"><Wallet size={12} /></span>Saldo en caja y bancos</div>
           <div className="value">{fmtMoney(totalCash(db))}</div>
         </div>
       </div>
 
       <div className="qn-stats-row" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         <div className="qn-card qn-stat">
-          <div className="label">Utilidad neta del mes</div>
+          <div className="label"><span className="qn-stat-icon"><Scale size={12} /></span>Utilidad neta del mes</div>
           <div className="value" style={{ color: pyg.utilidadNeta >= 0 ? C.teal : C.rust }}>{fmtMoney(pyg.utilidadNeta)}</div>
         </div>
         <div className="qn-card qn-stat">
-          <div className="label">Margen neto del mes</div>
+          <div className="label"><span className="qn-stat-icon"><TrendingUp size={12} /></span>Margen neto del mes</div>
           <div className="value">{pyg.margenNeto === null ? '—' : `${pyg.margenNeto.toFixed(1)}%`}</div>
         </div>
         <div className="qn-card qn-stat">
-          <div className="label">Valor en inventario</div>
+          <div className="label"><span className="qn-stat-icon"><Package size={12} /></span>Valor en inventario</div>
           <div className="value">{fmtMoney(inventoryValue(db))}</div>
         </div>
       </div>
@@ -2750,7 +2946,11 @@ function LoadingScreen({ text }) {
   return (
     <div className="qn-root" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <GlobalStyle />
-      <div style={{ color: C.inkSoft, fontSize: 13 }}>{text || 'Cargando Catalyst…'}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', border: `3px solid ${C.line}`, borderTopColor: C.tealBright, animation: 'qnSpin 0.7s linear infinite' }} />
+        <div style={{ color: C.inkSoft, fontSize: 13 }}>{text || 'Cargando Catalyst…'}</div>
+        <style>{`@keyframes qnSpin { to { transform: rotate(360deg); } }`}</style>
+      </div>
     </div>
   );
 }
@@ -2799,9 +2999,21 @@ function App({ userId }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [conflict, setConflict] = useState(false);
   const [tab, setTab] = useState('dashboard');
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const saveTimer = useRef(null);
   const firstLoad = useRef(true);
   const versionRef = useRef(null); // último updated_at que sabemos que está en la base de datos
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2894,20 +3106,24 @@ function App({ userId }) {
       )}
       <div className="qn-shell">
         <Sidebar tab={tab} setTab={setTab} company={db.company} />
-        <div className="qn-main">
-          {tab === 'dashboard' && <Dashboard db={db} />}
-          {tab === 'ventas' && <Ventas db={db} setDb={setDb} />}
-          {tab === 'cxc' && <CuentasCobrar db={db} setDb={setDb} />}
-          {tab === 'cartera' && <Cartera db={db} />}
-          {tab === 'cxp' && <CuentasPagar db={db} setDb={setDb} />}
-          {tab === 'inventario' && <Inventario db={db} setDb={setDb} />}
-          {tab === 'caja' && <CajaBancos db={db} setDb={setDb} />}
-          {tab === 'historicos' && <Historicos db={db} />}
-          {tab === 'balance' && <BalanceGeneral db={db} />}
-          {tab === 'pyg' && <EstadoResultados db={db} />}
-          {tab === 'maestros' && <Maestros db={db} setDb={setDb} />}
+        <div className="qn-right-col">
+          <TopBar onOpenSearch={() => setPaletteOpen(true)} />
+          <div className="qn-main">
+            {tab === 'dashboard' && <Dashboard db={db} />}
+            {tab === 'ventas' && <Ventas db={db} setDb={setDb} />}
+            {tab === 'cxc' && <CuentasCobrar db={db} setDb={setDb} />}
+            {tab === 'cartera' && <Cartera db={db} />}
+            {tab === 'cxp' && <CuentasPagar db={db} setDb={setDb} />}
+            {tab === 'inventario' && <Inventario db={db} setDb={setDb} />}
+            {tab === 'caja' && <CajaBancos db={db} setDb={setDb} />}
+            {tab === 'historicos' && <Historicos db={db} />}
+            {tab === 'balance' && <BalanceGeneral db={db} />}
+            {tab === 'pyg' && <EstadoResultados db={db} />}
+            {tab === 'maestros' && <Maestros db={db} setDb={setDb} />}
+          </div>
         </div>
       </div>
+      {paletteOpen && <CommandPalette db={db} onClose={() => setPaletteOpen(false)} onNavigate={setTab} />}
     </div>
   );
 }
