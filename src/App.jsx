@@ -1026,9 +1026,30 @@ function Ventas({ db, setDb }) {
   const [preview, setPreview] = useState(null);
   const [editing, setEditing] = useState(null);
   const [q, setQ] = useState('');
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [importResult, setImportResult] = useState(null);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef(null);
+
+  const applyPreset = (preset) => {
+    const today = todayISO();
+    if (preset === 'hoy') { setDesde(today); setHasta(today); }
+    else if (preset === 'semana') {
+      const d = new Date(today + 'T00:00:00');
+      const dow = d.getDay();
+      const diff = dow === 0 ? 6 : dow - 1;
+      d.setDate(d.getDate() - diff);
+      setDesde(d.toISOString().slice(0, 10));
+      setHasta(today);
+    } else if (preset === 'mes') {
+      setDesde(`${today.slice(0, 7)}-01`);
+      setHasta(today);
+    } else {
+      setDesde('');
+      setHasta('');
+    }
+  };
 
   const handleFileChosen = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -1059,12 +1080,20 @@ function Ventas({ db, setDb }) {
   };
 
   const rows = useMemo(() => {
-    return db.invoices.filter((inv) => {
-      const client = db.clients.find((c) => c.id === inv.clientId);
-      const text = `${inv.number} ${client ? client.name : ''}`.toLowerCase();
-      return text.includes(q.toLowerCase());
-    });
-  }, [db.invoices, db.clients, q]);
+    return db.invoices
+      .filter((inv) => {
+        const client = db.clients.find((c) => c.id === inv.clientId);
+        const text = `${inv.number} ${client ? client.name : ''}`.toLowerCase();
+        if (!text.includes(q.toLowerCase())) return false;
+        if (desde && inv.date < desde) return false;
+        if (hasta && inv.date > hasta) return false;
+        return true;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date) || b.number.localeCompare(a.number));
+  }, [db.invoices, db.clients, q, desde, hasta]);
+
+  const rowsTotal = rows.reduce((s, inv) => s + inv.total, 0);
+  const hasDateFilter = Boolean(desde || hasta);
 
   const addPayment = (invoiceId, payment) => {
     setDb((prev) => {
@@ -1139,14 +1168,37 @@ function Ventas({ db, setDb }) {
       )}
 
       <div className="qn-card qn-section">
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-          <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
-            <Search size={14} style={{ position: 'absolute', left: 10, top: 10, color: C.inkSoft }} />
-            <input className="qn-input" style={{ paddingLeft: 30 }} placeholder="Buscar por factura o cliente" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 220, maxWidth: 320 }}>
+            <label className="qn-label">Buscar</label>
+            <Search size={14} style={{ position: 'absolute', left: 10, top: 30, color: C.inkSoft }} />
+            <input className="qn-input" style={{ paddingLeft: 30 }} placeholder="Factura o cliente" value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          <div>
+            <label className="qn-label">Desde</label>
+            <input className="qn-input" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={{ width: 150 }} />
+          </div>
+          <div>
+            <label className="qn-label">Hasta</label>
+            <input className="qn-input" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={{ width: 150 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 6, paddingBottom: 2 }}>
+            <button className="qn-btn qn-btn-sm" onClick={() => applyPreset('hoy')}>Hoy</button>
+            <button className="qn-btn qn-btn-sm" onClick={() => applyPreset('semana')}>Esta semana</button>
+            <button className="qn-btn qn-btn-sm" onClick={() => applyPreset('mes')}>Este mes</button>
+            {hasDateFilter && <button className="qn-btn qn-btn-sm" onClick={() => applyPreset('todo')}>Quitar filtro</button>}
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ textAlign: 'right', paddingBottom: 2 }}>
+            <div className="qn-label" style={{ marginBottom: 2 }}>{rows.length} factura{rows.length === 1 ? '' : 's'}{hasDateFilter ? ' en el rango' : ''}</div>
+            <div className="qn-display" style={{ fontSize: 16, fontWeight: 700 }}>{fmtMoney(rowsTotal)}</div>
           </div>
         </div>
         {rows.length === 0 ? (
-          <Empty title="Aún no hay ventas" sub="Registra tu primera factura con el botón «Nueva venta»." />
+          <Empty
+            title={hasDateFilter || q ? 'Sin resultados' : 'Aún no hay ventas'}
+            sub={hasDateFilter || q ? 'Ajusta el rango de fechas o la búsqueda.' : 'Registra tu primera factura con el botón «Nueva venta».'}
+          />
         ) : (
           <table className="qn-table">
             <thead>
